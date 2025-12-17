@@ -231,7 +231,7 @@ class ChatServer:
 
         # Wrap server with TLS
         context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-        context.load_cert_chain(certfile='server.crt', keyfile='server.key')
+        context.load_cert_chain(certfile='spiffy/server.crt', keyfile='spiffy/server.key')
         self.server = context.wrap_socket(self.server, server_side=True)
 
         print_matrix_header()
