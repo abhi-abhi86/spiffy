@@ -68,4 +68,9 @@ For network access:
 
 ## Testing
 
-Run crypto tests: `python3 test_security.py`
+Run crypto tests: `python3 test_security.py`. 
+
+
+# RUN
+
+To run : `source venv/bin/activate && echo "1" | python spiffy/spiffy.py` or `python spiffy.py`
