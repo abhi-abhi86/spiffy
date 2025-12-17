@@ -1,0 +1,189 @@
+import socket
+import threading
+import random
+import string
+import sys
+import time
+
+class ChatServer:
+    def __init__(self, host='localhost', port=5555):
+        self.host = host
+        self.port = port
+        self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.rooms = {}  # {room_code: [client1, client2, ...]}
+        self.client_rooms = {}  # {client: room_code}
+        self.client_names = {}  # {client: username}
+        
+    def start(self):
+        self.server.bind((self.host, self.port))
+        self.server.listen()
+        print(f"[SERVER] Started on {self.host}:{self.port}")
+        
+        while True:
+            client, addr = self.server.accept()
+            thread = threading.Thread(target=self.handle_client, args=(client,))
+            thread.start()
+    
+    def generate_room_code(self):
+        """Generate a unique 6-character room code"""
+        while True:
+            code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+            if code not in self.rooms:
+                return code
+    
+    def handle_client(self, client):
+        try:
+            # Ask for username
+            client.send("Enter your username: ".encode('utf-8'))
+            username = client.recv(1024).decode('utf-8').strip()
+            self.client_names[client] = username
+            
+            # Ask to create or join room
+            client.send("\n[1] Create new room\n[2] Join existing room\nChoice: ".encode('utf-8'))
+            choice = client.recv(1024).decode('utf-8').strip()
+            
+            if choice == '1':
+                room_code = self.generate_room_code()
+                self.rooms[room_code] = [client]
+                self.client_rooms[client] = room_code
+                client.send(f"\n✓ Room created! Share this code: {room_code}\nWaiting for others to join...\n".encode('utf-8'))
+            
+            elif choice == '2':
+                client.send("Enter room code: ".encode('utf-8'))
+                room_code = client.recv(1024).decode('utf-8').strip().upper()
+                
+                if room_code in self.rooms:
+                    self.rooms[room_code].append(client)
+                    self.client_rooms[client] = room_code
+                    
+                    # Notify everyone in the room
+                    join_msg = f"\n✓ {username} joined the room!\n"
+                    self.broadcast(room_code, join_msg, exclude=client)
+                    client.send(f"\n✓ Joined room {room_code}!\n".encode('utf-8'))
+                else:
+                    client.send("✗ Invalid room code!\n".encode('utf-8'))
+                    client.close()
+                    return
+            
+            # Start receiving messages
+            while True:
+                message = client.recv(1024).decode('utf-8')
+                if message:
+                    room_code = self.client_rooms.get(client)
+                    if room_code:
+                        full_msg = f"{username}: {message}"
+                        self.broadcast(room_code, full_msg, exclude=client)
+                else:
+                    break
+                    
+        except:
+            pass
+        finally:
+            self.remove_client(client)
+    
+    def broadcast(self, room_code, message, exclude=None):
+        """Send message to all clients in a room"""
+        if room_code in self.rooms:
+            for client in self.rooms[room_code]:
+                if client != exclude:
+                    try:
+                        client.send(message.encode('utf-8'))
+                    except:
+                        self.remove_client(client)
+    
+    def remove_client(self, client):
+        """Remove client from room and clean up"""
+        if client in self.client_rooms:
+            room_code = self.client_rooms[client]
+            username = self.client_names.get(client, "Unknown")
+            
+            if room_code in self.rooms:
+                self.rooms[room_code].remove(client)
+                leave_msg = f"\n✗ {username} left the room.\n"
+                self.broadcast(room_code, leave_msg)
+                
+                # Delete empty rooms
+                if len(self.rooms[room_code]) == 0:
+                    del self.rooms[room_code]
+            
+            del self.client_rooms[client]
+        
+        if client in self.client_names:
+            del self.client_names[client]
+        
+        client.close()
+
+
+class ChatClient:
+    def __init__(self, host='localhost', port=5555):
+        self.host = host
+        self.port = port
+        self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    
+    def connect(self):
+        try:
+            self.client.connect((self.host, self.port))
+            
+            # Receive messages in separate thread
+            receive_thread = threading.Thread(target=self.receive_messages)
+            receive_thread.start()
+            
+            # Send messages from main thread
+            self.send_messages()
+            
+        except Exception as e:
+            print(f"[ERROR] Could not connect: {e}")
+    
+    def receive_messages(self):
+        """Receive messages from server"""
+        while True:
+            try:
+                message = self.client.recv(1024).decode('utf-8')
+                if message:
+                    print(message, end='')
+                else:
+                    break
+            except:
+                print("\n[DISCONNECTED] Connection lost.")
+                self.client.close()
+                break
+    
+    def send_messages(self):
+        """Send messages to server"""
+        while True:
+            try:
+                message = input()
+                if message.lower() == '/quit':
+                    print("[EXIT] Leaving chat...")
+                    self.client.close()
+                    break
+                self.client.send(message.encode('utf-8'))
+            except:
+                break
+
+
+def main():
+    print("=" * 50)
+    print("    PRIVATE TERMINAL CHAT")
+    print("=" * 50)
+    print("\n[1] Start Server")
+    print("[2] Connect as Client")
+    choice = input("\nChoice: ").strip()
+    
+    if choice == '1':
+        print("\n[SERVER MODE]")
+        server = ChatServer()
+        server.start()
+    
+    elif choice == '2':
+        print("\n[CLIENT MODE]")
+        host = input("Server address (default: localhost): ").strip() or 'localhost'
+        client = ChatClient(host=host)
+        client.connect()
+    
+    else:
+        print("Invalid choice!")
+
+
+if __name__ == "__main__":
+    main()
