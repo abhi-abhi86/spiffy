@@ -328,6 +328,8 @@ class SslTlsAudit:
             result["issues"].append(str(e))
         return result
 
+class BreachSense:
+    """[BREACH_SENSE]: Leak Detection"""
     @staticmethod
     def check_identity(email: str) -> str:
         # Simulation of HIBP API
@@ -626,18 +628,35 @@ async def main():
             
             results = await asyncio.gather(*tasks)
             
-            # Aggregate Results by IP
-            host_map = {}
-            for res in results:
-                if res:
-                    # We need a way to map result back to IP (scan_port returns only port)
-                    # Correcting scan_port to return (ip, port) would be better, but for now we inferred it.
-                    # Actually, scan_port currently returns `port` or `None`.
-                    # To map back, we need to change logic slightly or infer from index.
+            # First: ICMP Ping Sweep to find alive hosts
+            print(f"{C_YELLOW}PHASE 1: PING SWEEP (192.168.x.1-254)...{C_RESET}")
+            alive_hosts = []
+            
+            async def ping_host(target_ip):
+                try:
+                    proc = await asyncio.create_subprocess_exec(
+                        'ping', '-c', '1', '-W', '1', target_ip,
+                        stdout=asyncio.subprocess.DEVNULL,
+                        stderr=asyncio.subprocess.DEVNULL
+                    )
+                    await asyncio.wait_for(proc.wait(), timeout=2)
+                    if proc.returncode == 0:
+                        return target_ip
+                except:
                     pass
-
-            # Refactored Approach: Scan Host (IP) -> List[Ports]
-            scan_tasks = []
+                return None
+            
+            # Scan full subnet range (1-254)
+            ping_tasks = [ping_host(f"{subnet}.{i}") for i in range(1, 255)]
+            ping_results = await asyncio.gather(*ping_tasks)
+            alive_hosts = [ip for ip in ping_results if ip]
+            
+            print(f"{C_BRIGHT_GREEN}FOUND {len(alive_hosts)} ALIVE HOSTS{C_RESET}")
+            print(f"{C_YELLOW}PHASE 2: DEEP FINGERPRINTING...{C_RESET}")
+            
+            # Phase 2: Deep scan on alive hosts
+            target_ports = [80, 443, 22, 62078, 445]
+            
             async def scan_host_ports(target_ip):
                 open_p = []
                 for p in target_ports:
@@ -645,25 +664,32 @@ async def main():
                         open_p.append(p)
                 return (target_ip, open_p)
 
-            scan_tasks = [scan_host_ports(f"{subnet}.{i}") for i in range(1, 20)]
+            scan_tasks = [scan_host_ports(ip) for ip in alive_hosts]
             host_results = await asyncio.gather(*scan_tasks)
 
             for ip, ports in host_results:
-                if ports:
-                    mac = arp_map.get(ip, "")
-                    vendor = net.resolve_mac_vendor(mac)
-                    banner = ""
-                    if 80 in ports: banner = await net.grab_banner(ip, 80)
-                    elif 22 in ports: banner = await net.grab_banner(ip, 22)
-                    
-                    # Heuristics
-                    os_guess = "Unknown"
-                    if ip == local_ip: os_guess = f"{C_BRIGHT_GREEN}[THIS DEVICE]{C_RESET}"
-                    elif 62078 in ports: os_guess = "iOS (Sync)"
-                    elif 445 in ports: os_guess = "Windows (SMB)"
-                    elif 22 in ports: os_guess = "Linux (SSH)"
-                    
-                    found.append(f"{ip.ljust(13)} | {mac.ljust(17)} | {vendor[:15].ljust(15)} | {os_guess} | {banner}")
+                mac = arp_map.get(ip, "")
+                vendor = net.resolve_mac_vendor(mac) if mac else "Unknown"
+                banner = ""
+                if 80 in ports: banner = await net.grab_banner(ip, 80)
+                elif 443 in ports: banner = await net.grab_banner(ip, 443)
+                elif 22 in ports: banner = await net.grab_banner(ip, 22)
+                
+                # Heuristics
+                os_guess = "Unknown"
+                if ip == local_ip: 
+                    os_guess = f"{C_BRIGHT_GREEN}[THIS DEVICE]{C_RESET}"
+                elif 62078 in ports: 
+                    os_guess = "iOS (iPhone/iPad)"
+                elif 445 in ports: 
+                    os_guess = "Windows (SMB)"
+                elif 22 in ports and 80 not in ports: 
+                    os_guess = "Linux (SSH)"
+                elif 80 in ports or 443 in ports:
+                    os_guess = "Web Server"
+                
+                port_str = f"Ports: {','.join(map(str, ports))}" if ports else "No common ports"
+                found.append(f"{ip.ljust(15)} | {mac.ljust(17)} | {vendor[:20].ljust(20)} | {os_guess.ljust(25)} | {port_str}")
             
             tui.draw_box(found or ["NO PROXIMATE HOSTS IDENTIFIED"], "RADAR SIGNALS")
             input("CONTINUE...")
