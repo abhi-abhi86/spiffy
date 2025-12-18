@@ -287,6 +287,6 @@ The consequences of unauthorized access far outweigh any potential benefits. Alw
 
 **Last Updated**: [Current Date]  
 **Repository**: https://github.com/abhi-abhi86/spiffy  
-**Maintained by**: [Your Name/Organization]
+**Maintained by**: [abhi-abhi86]
 
 
