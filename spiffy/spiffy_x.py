@@ -231,7 +231,11 @@ class ChatServer:
 
         # Wrap server with TLS
         context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-        context.load_cert_chain(certfile='spiffy/server.crt', keyfile='spiffy/server.key')
+        # Fix: Use paths relative to this script file to work regardless of CWD
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        cert_path = os.path.join(base_dir, 'server.crt')
+        key_path = os.path.join(base_dir, 'server.key')
+        context.load_cert_chain(certfile=cert_path, keyfile=key_path)
         self.server = context.wrap_socket(self.server, server_side=True)
 
         print_matrix_header()

