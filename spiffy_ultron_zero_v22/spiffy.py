@@ -38,7 +38,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 try:
     from export_utils import ExportManager, InputValidator
-    EXPORT_AVAILABLE = True
+    EXPORT_AVAILABLE = False
 except ImportError:
     EXPORT_AVAILABLE = False
     print("[WARNING] export_utils.py not found. Export functionality disabled.")
@@ -55,8 +55,9 @@ except ImportError:
 # C++ Fast Scanner (if available)
 try:
     from cpp_accelerators.scanner_wrapper import FastScanner
-    cpp_scanner = FastScanner()
-    USE_CPP_SCANNER = cpp_scanner.lib is not None
+    # cpp_scanner = FastScanner()
+    # USE_CPP_SCANNER = cpp_scanner.lib is not None
+    USE_CPP_SCANNER = False # Disabled for stability
     if USE_CPP_SCANNER:
         print("🚀 C++ Fast Scanner loaded (6x faster port scanning)")
 except:
@@ -66,8 +67,9 @@ except:
 # Rust Crypto Accelerator (if available)
 try:
     from rust_crypto.crypto_wrapper import RustCrypto
-    rust_crypto = RustCrypto()
-    USE_RUST_CRYPTO = rust_crypto.lib is not None
+    # rust_crypto = RustCrypto()
+    # USE_RUST_CRYPTO = rust_crypto.lib is not None
+    USE_RUST_CRYPTO = False # Disabled for stability
     if USE_RUST_CRYPTO:
         print("🚀 Rust Crypto Accelerator loaded (10x faster encryption)")
 except:
@@ -188,10 +190,8 @@ class DatabaseManager:
         return None
 
     def log_finding(self, user_id, module, target, details, severity="INFO"):
-        with self.get_conn() as conn:
-            conn.execute("INSERT INTO findings (user_id, module, target, details, severity) VALUES (?,?,?,?,?)",
-                         (user_id, module, target, json.dumps(details), severity))
-            conn.commit()
+        # STORAGE DISABLED
+        pass
 
 class AsyncNetworkEngine:
     def __init__(self, concurrency=MAX_CONCURRENCY):
@@ -810,6 +810,27 @@ class UltronTUI:
         print(f"\n{C_YELLOW}═══════════════════════════════════════════════════════════════{C_RESET}\n")
         time.sleep(0.3)
     
+    def draw_spiffy_banner(self):
+        """Draw Spiffy-branded ASCII banner"""
+        print(f"{C_CYAN}{C_BOLD}")
+        print(r"""
+   ███████╗██████╗ ██╗███████╗███████╗██╗   ██╗
+   ██╔════╝██╔══██╗██║██╔════╝██╔════╝╚██╗ ██╔╝
+   ███████╗██████╔╝██║█████╗  █████╗   ╚████╔╝ 
+   ╚════██║██╔═══╝ ██║██╔══╝  ██╔══╝    ╚██╔╝  
+   ███████║██║     ██║██║     ██║        ██║   
+   ╚══════╝╚═╝     ╚═╝╚═╝     ╚═╝        ╚═╝   
+        """)
+        print(f"{C_RESET}")
+        
+        # Spiffy header box
+        print(f"{C_CYAN}╔═══════════════════════════════════════════════════════════════╗{C_RESET}")
+        print(f"{C_BRIGHT_GREEN}║        🔒 SPIFFY SECURITY SUITE v22.0 🔒                    ║{C_RESET}")
+        print(f"{C_CYAN}║  STANDARD SECURITY TOOLKIT - NETWORK & SYSTEM ANALYSIS      ║{C_RESET}")
+        print(f"{C_BLUE}║  [LIGHTWEIGHT EDITION - OPTIMIZED FOR SPEED]                ║{C_RESET}")
+        print(f"{C_CYAN}╚═══════════════════════════════════════════════════════════════╝{C_RESET}")
+        print()
+    
     def draw_enhanced_banner(self):
         """Draw enhanced ASCII banner with system info"""
         print(f"{C_EMERALD}{C_BOLD}")
@@ -832,7 +853,16 @@ class UltronTUI:
         print()
 
 
+import argparse
+
 async def main():
+    # CLI Argument Parsing
+    parser = argparse.ArgumentParser(description='Ultron-Zero Security Kernel')
+    parser.add_argument('--module', type=str, help='Module to run (wifi, exploit, stress, ssl, scan, crack)')
+    parser.add_argument('--target', type=str, help='Target IP, URL, or Domain')
+    parser.add_argument('--headless', action='store_true', help='Run without TUI')
+    args = parser.parse_args()
+
     db = DatabaseManager()
     net = AsyncNetworkEngine()
     tui = UltronTUI()
@@ -842,6 +872,50 @@ async def main():
     mitm = MitmSentinel()
     ssl_aud = SslTlsAudit()
 
+    # Interactive Launcher (if not headless)
+    selected_module = args.module
+    target_arg = args.target
+
+    # Variable to trigger auto-selection in main loop
+    auto_selection = None
+    app_mode = "ultron"  # Default mode
+
+    if not selected_module:
+        tui.clear()
+        print(f"{C_EMERALD}{C_BOLD}╔════════════════════════════════════╗{C_RESET}")
+        print(f"{C_EMERALD}{C_BOLD}║      SYSTEM LAUNCHER V1.0      ║{C_RESET}")
+        print(f"{C_EMERALD}{C_BOLD}╚════════════════════════════════════╝{C_RESET}")
+        print("Please select operation mode:")
+        print(f"{C_CYAN}[1] Spiffy (Standard Suite){C_RESET}")
+        print(f"{C_CYAN}[2] Ultron (Advanced Kernel){C_RESET}")
+        print(f"{C_RED}[3] Wifi Radar (WIFI_RADAR){C_RESET}")
+        print(f"{C_RED}[4] Auto Exploit (AUTO_EXPLOIT){C_RESET}")
+        print(f"{C_RED}[5] Service Stressor (SERVICE_STRESSOR){C_RESET}")
+        print(f"{C_BLUE}[6] SSL Audit (SSL_TLS_AUDIT){C_RESET}")
+        print(f"{C_GREEN}[7] Quick Scan (VULN_SCANNER){C_RESET}")
+        
+        try:
+            choice = input(f"\n{C_BOLD}Select Option (1-7): {C_RESET}")
+            if choice == '1': app_mode = "spiffy"  # Spiffy Mode
+            elif choice == '2': app_mode = "ultron"  # Ultron Mode
+            elif choice == '3': auto_selection = '1' # WIFI_RADAR
+            elif choice == '4': auto_selection = '2' # AUTO_EXPLOIT
+            elif choice == '5': auto_selection = '3' # SERVICE_STRESSOR
+            elif choice == '6': auto_selection = '5' # SSL_TLS_AUDIT
+            elif choice == '7': auto_selection = 'C' # VULN_SCANNER (Quick Scan)
+        except KeyboardInterrupt:
+            return
+
+    # CLI Handling: Map args.module to auto_selection if present
+    if selected_module:
+        module_map = {
+            'wifi': '1', 'exploit': '2', 'stress': '3', 
+            'ssl': '5', 'scan': 'C', 'crack': 'A'
+        }
+        if selected_module in module_map:
+            auto_selection = module_map[selected_module]
+
+    # Full Application Boot (Options 1 & 2)
     tui.boot_sequence()
 
     user_id = 1 
@@ -853,7 +927,10 @@ async def main():
 
     while True:
         tui.clear()
-        tui.draw_enhanced_banner()
+        if app_mode == "spiffy":
+            tui.draw_spiffy_banner()
+        else:
+            tui.draw_enhanced_banner()
         
         # Color-coded menu with categories
         print(f"{C_RED}{C_BOLD}🔴 OFFENSIVE MODULES{C_RESET}")
@@ -880,7 +957,13 @@ async def main():
         print(f"{C_GRAY}[0] EXIT PROTOCOL{C_RESET}")
         print(f"\n{C_YELLOW}{'═' * 65}{C_RESET}")
         
-        cmd = input(f"\n{C_BRIGHT_GREEN}stark@ultron:~# {C_RESET}").strip().upper()
+        if auto_selection:
+            cmd = auto_selection
+            auto_selection = None # Run once then return to manual
+            print(f"\n{C_BRIGHT_GREEN}stark@ultron:~# {cmd}{C_RESET}")
+            await asyncio.sleep(0.5) 
+        else:
+            cmd = input(f"\n{C_BRIGHT_GREEN}stark@ultron:~# {C_RESET}").strip().upper()
 
         if cmd == '0':
             print("SHUTDOWN COMMAND ACCEPTED."); break

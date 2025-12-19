@@ -25,16 +25,12 @@ class OmegaLogger:
         self.audit_logger = self._create_logger("audit", "audit.log")
     
     def _create_logger(self, name: str, filename: str) -> logging.Logger:
-        """Create a logger with file rotation"""
+        """Create a logger (Console only - File logging disabled)"""
         logger = logging.getLogger(f"omega.{name}")
         logger.setLevel(logging.DEBUG)
         
-        # File handler with rotation (10MB max, keep 5 backups)
-        file_handler = logging.handlers.RotatingFileHandler(
-            self.log_dir / filename,
-            maxBytes=10*1024*1024,  # 10MB
-            backupCount=5
-        )
+        # File handler disabled
+        # file_handler = logging.handlers.RotatingFileHandler(...)
         
         # Console handler
         console_handler = logging.StreamHandler()
@@ -46,10 +42,10 @@ class OmegaLogger:
             datefmt='%Y-%m-%d %H:%M:%S'
         )
         
-        file_handler.setFormatter(formatter)
+        # file_handler.setFormatter(formatter)
         console_handler.setFormatter(formatter)
         
-        logger.addHandler(file_handler)
+        # logger.addHandler(file_handler)
         logger.addHandler(console_handler)
         
         return logger

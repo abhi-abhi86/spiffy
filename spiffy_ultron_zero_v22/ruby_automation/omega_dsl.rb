@@ -99,39 +99,29 @@ module Omega
     end
     
     def execute_report(task)
-      puts "📊 Generating #{task[:format].upcase} report..."
+      puts "📊 Generating #{task[:format].upcase} report (STORAGE DISABLED)..."
       
       findings = query(limit: 1000)
       
-      case task[:format]
-      when :json
-        File.write(task[:output], JSON.pretty_generate(findings))
-      when :text
-        File.open(task[:output], 'w') do |f|
-          f.puts "OMEGA KERNEL SECURITY REPORT"
-          f.puts "=" * 50
-          f.puts "Generated: #{Time.now}"
-          f.puts "Total Findings: #{findings.length}"
-          f.puts "\n"
-          
-          findings.each do |finding|
-            f.puts "[#{finding[:severity]}] #{finding[:module]}"
-            f.puts "  Target: #{finding[:target]}"
-            f.puts "  Details: #{finding[:details]}"
-            f.puts "  Time: #{finding[:timestamp]}"
-            f.puts ""
-          end
-        end
-      end
+      # STORAGE DISABLED
+      # case task[:format]
+      # when :json
+      #   File.write(task[:output], JSON.pretty_generate(findings))
+      # when :text
+      #   File.open(task[:output], 'w') do |f|
+      #     # ...
+      #   end
+      # end
       
-      puts "   ✓ Report saved: #{task[:output]}"
+      puts "   ✓ Report generated in memory only (Storage Disabled)"
     end
     
     def log_finding(module_name, target, details, severity = 'INFO')
-      @db.execute(
-        "INSERT INTO findings (module, target, details, severity, timestamp) VALUES (?, ?, ?, ?, datetime('now'))",
-        [module_name, target, details, severity]
-      )
+      # STORAGE DISABLED
+      # @db.execute(
+      #   "INSERT INTO findings (module, target, details, severity, timestamp) VALUES (?, ?, ?, ?, datetime('now'))",
+      #   [module_name, target, details, severity]
+      # )
     end
   end
   
