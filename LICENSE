@@ -1,0 +1,197 @@
+MIT License
+
+Copyright (c) 2024 Stark Industries / Spiffy Project
+All Rights Reserved
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+================================================================================
+                    COMPREHENSIVE PROJECT LICENSE
+================================================================================
+
+This license applies to ALL components of the Spiffy Project, including:
+
+1. OMEGA KERNEL (spiffy_ultron_zero_v22/)
+   - Python core application
+   - C++ network accelerators
+   - Rust cryptography accelerators
+   - PHP web dashboard
+   - Ruby automation DSL
+   - Bash deployment scripts
+   - Java portable agents
+
+2. SPIFFY OMEGA (spiffy_omega/)
+   - C++ implementation
+   - Advanced security features
+
+3. SPIFFY CPP (spiffy_cpp/)
+   - C++ accelerators and bindings
+
+4. SPIFFY STANDARD SECURITY SUITE (spiffy_standard_security_suite/)
+   - Standard security tools
+
+5. ALL DOCUMENTATION
+   - README files
+   - Deployment guides
+   - Usage instructions
+   - Technical documentation
+
+6. ALL SUPPORTING FILES
+   - Configuration files
+   - Build scripts
+   - Test files
+   - Example workflows
+
+================================================================================
+                        IMPORTANT LEGAL NOTICE
+================================================================================
+
+EDUCATIONAL AND AUTHORIZED USE ONLY
+
+This software is designed EXCLUSIVELY for:
+- Educational purposes
+- Authorized security testing
+- Legitimate security research
+- Professional penetration testing (with written permission)
+
+BY USING THIS SOFTWARE, YOU AGREE TO:
+
+1. AUTHORIZATION REQUIREMENT
+   You will ONLY use this software on:
+   - Systems and networks you own, OR
+   - Systems and networks for which you have EXPLICIT WRITTEN PERMISSION
+   
+   Unauthorized access to computer systems is ILLEGAL in most jurisdictions
+   and may result in criminal prosecution.
+
+2. LEGAL COMPLIANCE
+   You are responsible for compliance with ALL applicable laws, including but
+   not limited to:
+   - Computer Fraud and Abuse Act (CFAA) - United States
+   - Computer Misuse Act - United Kingdom
+   - General Data Protection Regulation (GDPR) - European Union
+   - All local, state, national, and international laws
+
+3. PROHIBITED ACTIVITIES
+   You will NOT use this software for:
+   - Unauthorized access to systems or networks
+   - Causing damage, disruption, or denial of service
+   - Stealing, copying, or modifying data without authorization
+   - Intercepting communications without consent
+   - Violating privacy laws or regulations
+   - Any illegal or malicious activities
+
+4. NO WARRANTY
+   This software is provided "AS IS" without warranty of any kind, either
+   express or implied, including but not limited to warranties of
+   merchantability, fitness for a particular purpose, or non-infringement.
+
+5. LIMITATION OF LIABILITY
+   In no event shall the authors, copyright holders, or contributors be
+   liable for any claim, damages, or other liability, whether in an action
+   of contract, tort, or otherwise, arising from, out of, or in connection
+   with the software or the use or other dealings in the software.
+
+6. INDEMNIFICATION
+   You agree to indemnify, defend, and hold harmless the authors, copyright
+   holders, and contributors from any claims, damages, losses, liabilities,
+   and expenses (including attorney fees) arising from your use or misuse
+   of this software.
+
+7. ETHICAL USE
+   You agree to use this software in accordance with ethical hacking
+   principles and responsible disclosure practices.
+
+8. PROFESSIONAL STANDARDS
+   If using this software for professional security testing, you agree to:
+   - Obtain signed contracts and authorization
+   - Define clear scope and rules of engagement
+   - Report findings responsibly
+   - Maintain professional liability insurance
+   - Follow industry best practices
+
+================================================================================
+                        THIRD-PARTY LICENSES
+================================================================================
+
+This project uses the following third-party libraries and components:
+
+PYTHON DEPENDENCIES:
+- cryptography (Apache License 2.0 / BSD)
+- psutil (BSD License)
+
+RUST DEPENDENCIES:
+- aes-gcm (Apache License 2.0 / MIT)
+- sha2 (Apache License 2.0 / MIT)
+- hmac (Apache License 2.0 / MIT)
+
+All third-party components retain their original licenses.
+See individual component documentation for specific license information.
+
+================================================================================
+                        CONTRIBUTION GUIDELINES
+================================================================================
+
+Contributions to this project are welcome under the following conditions:
+
+1. All contributions must be original work or properly attributed
+2. Contributors agree to license their contributions under this MIT License
+3. Contributions must not introduce malicious code or backdoors
+4. Contributors must follow ethical coding practices
+5. All code must include appropriate documentation
+
+================================================================================
+                        DISCLAIMER OF ENDORSEMENT
+================================================================================
+
+The names "Stark Industries" and "JARVIS" are used fictitiously for thematic
+purposes only. This project is not affiliated with, endorsed by, or connected
+to Marvel Entertainment, The Walt Disney Company, or any related entities.
+
+================================================================================
+                        EXPORT COMPLIANCE
+================================================================================
+
+This software may be subject to export control laws and regulations. Users
+are responsible for compliance with all applicable export control laws.
+
+================================================================================
+                        CONTACT INFORMATION
+================================================================================
+
+For licensing questions, security concerns, or responsible disclosure:
+- GitHub: https://github.com/abhi-abhi86/spiffy
+- Issues: https://github.com/abhi-abhi86/spiffy/issues
+
+================================================================================
+
+BY USING THIS SOFTWARE, YOU ACKNOWLEDGE THAT YOU HAVE READ THIS LICENSE,
+UNDERSTAND IT, AND AGREE TO BE BOUND BY ITS TERMS AND CONDITIONS.
+
+IF YOU DO NOT AGREE TO THESE TERMS, DO NOT USE THIS SOFTWARE.
+
+================================================================================
+                        VERSION INFORMATION
+================================================================================
+
+License Version: 1.0
+Last Updated: December 2024
+Applies to: All versions of Spiffy Project components
+
+================================================================================
