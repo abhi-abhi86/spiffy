@@ -31,36 +31,29 @@ from datetime import datetime, timedelta
 from typing import Optional, Tuple, List, Dict, Any
 from contextlib import contextmanager
 
-# v25.0 Crypto Upgrades
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-
-# ==============================================================================
-# [KERNEL CONSTANTS]
-# ==============================================================================
 
 DB_FILE = "ultron_zero.db"
 LOG_FILE = "ultron_audit.log"
 MAX_CONCURRENCY = 100
 WATCHDOG_TIMEOUT = 1.5
 
-# OUI Database (Stark Industries Enhanced)
 OUI_DB = {
     "00:50:56": "VMware Virtual", "00:0C:29": "VMware Virtual",
     "B8:27:EB": "Raspberry Pi", "DC:A6:32": "Raspberry Pi",
     "F0:18:98": "Apple iPhone", "00:25:00": "Apple Mac",
-    "A8:5B:78": "Apple iPhone 14 Pro", # High fidelity
+    "A8:5B:78": "Apple iPhone 14 Pro",
     "40:83:1D": "Apple iPad", "FC:F1:52": "Sony PlayStation",
     "50:E5:49": "Microsoft Xbox", "24:77:03": "Intel Corp",
     "50:56:BF": "Samsung Galaxy", "00:07:AB": "Samsung SmartTV",
-    "8C:F5:F3": "Samsung Galaxy S23 Ultra", # High fidelity
-    "ST:AR:K1": "Stark-Pad (Vibranium Ed.)", # Easter egg
+    "8C:F5:F3": "Samsung Galaxy S23 Ultra",
+    "ST:AR:K1": "Stark-Pad (Vibranium Ed.)",
     "ST:AR:K2": "Jarvis Mainframe Node"
 }
 
-# User-Agent Pool for Stealth Evasion
 USER_AGENTS = [
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36",
@@ -68,7 +61,6 @@ USER_AGENTS = [
     "Stark-Browser/4.0 (Compatible; Jarvis-OS v22.0)"
 ]
 
-# ANSI Colors (Emerald Sentinel Theme)
 C_EMERALD = "\033[38;5;46m"
 C_BRIGHT_GREEN = "\033[38;5;82m"
 C_DARK_GREEN = "\033[38;5;22m"
@@ -80,10 +72,6 @@ C_GRAY = "\033[38;5;240m"
 C_BOLD = "\033[1m"
 C_RESET = "\033[0m"
 C_CLEAR = "\033[H\033[J"
-
-# ==============================================================================
-# [PERSISTENCE LAYER: ENCRYPTED_VAULT]
-# ==============================================================================
 
 class DatabaseManager:
     def __init__(self, db_path: str = DB_FILE):
@@ -153,10 +141,6 @@ class DatabaseManager:
                          (user_id, module, target, json.dumps(details), severity))
             conn.commit()
 
-# ==============================================================================
-# [SYSTEM CORE: ASYNC NETWORKING & STEALTH]
-# ==============================================================================
-
 class AsyncNetworkEngine:
     def __init__(self, concurrency=MAX_CONCURRENCY):
         self.sem = asyncio.Semaphore(concurrency)
@@ -197,7 +181,6 @@ class AsyncNetworkEngine:
     def resolve_mac_vendor(self, mac: str) -> str:
         if not mac: return "Unknown"
         clean = mac.upper().replace(':', '').replace('-', '')[:6]
-        # Format XX:XX:XX
         prefix = f"{clean[0:2]}:{clean[2:4]}:{clean[4:6]}"
         return OUI_DB.get(prefix, "Unknown Hardware")
 
@@ -207,10 +190,6 @@ class AsyncNetworkEngine:
         try: s.connect(('8.8.8.8', 1)); return s.getsockname()[0]
         except: return '127.0.0.1'
         finally: s.close()
-
-# ==============================================================================
-# [RED TEAM MODULES: OFFENSIVE]
-# ==============================================================================
 
 class AutoExploitSim:
     """[AUTO_EXPLOIT_SIM]: Fuzzing Engine"""
@@ -229,12 +208,10 @@ class AutoExploitSim:
         
         for p_type, payloads in self.PAYLOADS.items():
             for p in payloads:
-                # Naive Append Fuzzing
                 fuzzed_url = f"{url}?q={urllib.parse.quote(p)}"
                 try:
                     req = urllib.request.Request(fuzzed_url, headers={'User-Agent': 'UltronScan/1.0'})
                     with urllib.request.urlopen(req, timeout=3, context=ctx) as res:
-                        # Simple Heuristic: 500 errors or reflective output often implies issues
                         if res.code == 500:
                             vulns.append(f"POTENTIAL {p_type}: Server Error 500 on payload {p}")
                         body = res.read().decode('utf-8', errors='ignore')
@@ -275,10 +252,6 @@ class ServiceStressor:
             "status": "STABLE" if failed < (requests * 0.2) else "UNSTABLE"
         }
 
-# ==============================================================================
-# [BLUE TEAM MODULES: DEFENSIVE]
-# ==============================================================================
-
 class MitmSentinel:
     """[MITM_SENTINEL]: ARP Analysis"""
     @staticmethod
@@ -286,7 +259,7 @@ class MitmSentinel:
         alerts = []
         try:
             output = subprocess.check_output("arp -a", shell=True).decode()
-            mac_map = {} # MAC -> List of IPs
+            mac_map = {}
             
             regex = r"\(?(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\)?\s+(?:at|)\s+([0-9a-fA-F:\-]{17})"
             for line in output.splitlines():
@@ -298,7 +271,6 @@ class MitmSentinel:
                     else:
                         mac_map[mac] = [ip]
             
-            # Analyze for Duplicates (Poisoning Sign)
             for mac, ips in mac_map.items():
                 if len(ips) > 1 and "ff:ff:ff:ff:ff:ff" not in mac.lower():
                     alerts.append(f"ARP POISON WARNING: MAC {mac} claims IPs {ips}")
@@ -318,9 +290,7 @@ class SslTlsAudit:
                     result["valid"] = True
                     result["protocol"] = ssock.version()
                     result["cipher"] = ssock.cipher()[0]
-                    # Expiry Check
                     not_after = cert['notAfter']
-                    # Simplified parsing for demo
                     result["expiry"] = not_after
                     if ssock.version() in ['TLSv1', 'TLSv1.1']:
                         result["issues"].append("DEPRECATED_PROTOCOL (TLS < 1.2)")
@@ -332,10 +302,8 @@ class BreachSense:
     """[BREACH_SENSE]: Leak Detection"""
     @staticmethod
     def check_identity(email: str) -> str:
-        # Simulation of HIBP API
-        # Real impl would query haveibeenpwned.com API
         h = hashlib.sha1(email.encode()).hexdigest()
-        if h[0] in ['0', '1', '2', '3']: # Deterministic simulation
+        if h[0] in ['0', '1', '2', '3']:
             return f"COMPROMISED (Simulated found in 3 breaches)"
         return "SECURE (No simulated breaches found)"
 
@@ -343,7 +311,6 @@ class BifrostChat:
     """[BIFROST_CHAT]: Secure P2P Protocol (E2EE: ECDH + AES-GCM)"""
     
     def __init__(self):
-        # Generate Ephemeral Keys (ECC SECP256R1)
         self.priv_key = ec.generate_private_key(ec.SECP256R1())
         self.pub_key = self.priv_key.public_key()
         self.shared_key = None
@@ -359,7 +326,6 @@ class BifrostChat:
         try:
             peer_pub = serialization.load_pem_public_key(peer_pub_bytes)
             shared_secret = self.priv_key.exchange(ec.ECDH(), peer_pub)
-            # Derive AES Key using HKDF
             self.shared_key = HKDF(
                 algorithm=hashes.SHA256(),
                 length=32,
@@ -389,7 +355,6 @@ class BifrostChat:
 
     @staticmethod
     def generate_token(ip: str, port: int) -> str:
-        # Ten digit obfuscation logic
         try:
             parts = ip.split('.')
             if len(parts) != 4: return "INVALID_IP"
@@ -428,12 +393,10 @@ class BifrostChat:
         addr = writer.get_extra_info('peername')
         print(f"\n{C_BRIGHT_GREEN}[!] PEER CONNECTED FROM {addr}. INITIATING KEY EXCHANGE...{C_RESET}")
         
-        # 1. Send Public Key
         my_pub = self.get_pub_bytes()
         writer.write(len(my_pub).to_bytes(4, 'big') + my_pub)
         await writer.drain()
 
-        # 2. Receive Peer Public Key
         try:
             len_bytes = await reader.read(4)
             p_len = int.from_bytes(len_bytes, 'big')
@@ -450,7 +413,6 @@ class BifrostChat:
         
         async def read_loop():
             while True:
-                # Read length prefaced messages
                 try:
                     lb = await reader.read(4)
                     if not lb: break
@@ -462,7 +424,6 @@ class BifrostChat:
         
         asyncio.create_task(read_loop())
         
-        # Keep connection open for demo (simulated interactive loop would go here)
         while True:
             await asyncio.sleep(1)
 
@@ -473,12 +434,10 @@ class BifrostChat:
             reader, writer = await asyncio.open_connection(ip, port)
             print(f"{C_GREEN}CONNECTED. PERFORMING HANDSHAKE...{C_RESET}")
             
-            # 1. Receiver Server Pub Key
             len_bytes = await reader.read(4)
             s_len = int.from_bytes(len_bytes, 'big')
             server_pub = await reader.read(s_len)
             
-            # 2. Derive Secret & Send My Pub Key
             if self.derive_shared_secret(server_pub):
                  my_pub = self.get_pub_bytes()
                  writer.write(len(my_pub).to_bytes(4, 'big') + my_pub)
@@ -488,7 +447,6 @@ class BifrostChat:
                  print(f"{C_RED}KEY EXCHANGE FAILED.{C_RESET}")
                  return
 
-            # Simulate sending a secured message
             msg = "BIFROST_CLIENT_ONLINE"
             enc = self.encrypt(msg)
             writer.write(len(enc).to_bytes(4, 'big') + enc)
@@ -499,10 +457,6 @@ class BifrostChat:
                 
         except Exception as e:
             print(f"{C_RED}CONNECTION FAILED: {e}{C_RESET}")
-
-# ==============================================================================
-# [UI: ULTRON TERMINAL INTERFACE]
-# ==============================================================================
 
 class UltronTUI:
     def clear(self): print(C_CLEAR, end="")
@@ -543,16 +497,11 @@ class UltronTUI:
             time.sleep(0.15)
         time.sleep(0.5)
 
-# ==============================================================================
-# [MAIN EXECUTABLE]
-# ==============================================================================
-
 async def main():
     db = DatabaseManager()
     net = AsyncNetworkEngine()
     tui = UltronTUI()
     
-    # Modules
     exploit_sim = AutoExploitSim()
     stressor = ServiceStressor()
     mitm = MitmSentinel()
@@ -560,7 +509,6 @@ async def main():
 
     tui.boot_sequence()
 
-    # Login Simulation for Demo
     user_id = 1 
     if not db.verify("admin", "admin"):
         db.register("admin", "admin")
@@ -605,10 +553,8 @@ async def main():
             subnet = ".".join(local_ip.split('.')[:-1])
             found = []
             
-            # ARP Parse First
             try:
                 arp_out = subprocess.check_output("arp -a", shell=True).decode()
-                # Basic mock parse for context mapping
                 arp_map = {}
                 for line in arp_out.splitlines():
                     if "(" in line and "at" in line:
@@ -618,17 +564,15 @@ async def main():
                         arp_map[ip] = mac
             except: arp_map = {}
 
-            # Deep Fingerprint Scan (Ports: HTTP, HTTPS, SSH, iPhone-Sync, SMB)
             target_ports = [80, 443, 22, 62078, 445]
             tasks = []
-            for i in range(1, 20): # Limited range for demo
+            for i in range(1, 20):
                 ip = f"{subnet}.{i}"
                 for p in target_ports:
                     tasks.append(net.scan_port(ip, p))
             
             results = await asyncio.gather(*tasks)
             
-            # First: ICMP Ping Sweep to find alive hosts
             print(f"{C_YELLOW}PHASE 1: PING SWEEP (192.168.x.1-254)...{C_RESET}")
             alive_hosts = []
             
@@ -646,7 +590,6 @@ async def main():
                     pass
                 return None
             
-            # Scan full subnet range (1-254)
             ping_tasks = [ping_host(f"{subnet}.{i}") for i in range(1, 255)]
             ping_results = await asyncio.gather(*ping_tasks)
             alive_hosts = [ip for ip in ping_results if ip]
@@ -654,7 +597,6 @@ async def main():
             print(f"{C_BRIGHT_GREEN}FOUND {len(alive_hosts)} ALIVE HOSTS{C_RESET}")
             print(f"{C_YELLOW}PHASE 2: DEEP FINGERPRINTING...{C_RESET}")
             
-            # Phase 2: Deep scan on alive hosts
             target_ports = [80, 443, 22, 62078, 445]
             
             async def scan_host_ports(target_ip):
@@ -675,7 +617,6 @@ async def main():
                 elif 443 in ports: banner = await net.grab_banner(ip, 443)
                 elif 22 in ports: banner = await net.grab_banner(ip, 22)
                 
-                # Heuristics
                 os_guess = "Unknown"
                 if ip == local_ip: 
                     os_guess = f"{C_BRIGHT_GREEN}[THIS DEVICE]{C_RESET}"
@@ -758,7 +699,6 @@ async def main():
             print(f"{C_BLUE}[1] HOST (SERVER)   [2] CONNECT (CLIENT){C_RESET}")
             sc = input("> ")
             if sc == '1':
-                # For demo, run server as a task and wait a bit
                 try:
                     await chat.start_server()
                 except KeyboardInterrupt: pass

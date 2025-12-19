@@ -14,7 +14,6 @@ import secrets
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 
-# Hacker-style color codes
 class HColor:
     GREEN = '\033[92m'
     DARK_GREEN = '\033[32m'
@@ -29,7 +28,6 @@ class HColor:
     BOLD = '\033[1m'
     DIM = '\033[2m'
 
-# --- SECURITY MODULE ---
 class SecureCrypto:
     """
     Implements AES-GCM authenticated encryption for secure communication.
@@ -38,14 +36,14 @@ class SecureCrypto:
     def __init__(self, key):
         self.key = bytes.fromhex(key)
         self.backend = default_backend()
-        self.sent_nonces = set()  # For replay protection
+        self.sent_nonces = set()
         self.recv_nonces = set()
 
     def encrypt(self, data):
         if isinstance(data, str):
             data = data.encode('utf-8')
 
-        nonce = os.urandom(12)  # GCM nonce
+        nonce = os.urandom(12)
         while nonce in self.sent_nonces:
             nonce = os.urandom(12)
         self.sent_nonces.add(nonce)
@@ -73,7 +71,6 @@ class SecureCrypto:
         except Exception as e:
             raise ValueError("Decryption failed")
 
-# --- TERMINAL HELPERS ---
 def clear():
     os.system('cls' if os.name == 'nt' else 'clear')
 
@@ -111,7 +108,7 @@ def fake_update_screen():
     try:
         for i in range(1, 101):
             time.sleep(random.uniform(0.1, 2.0))
-            if random.random() > 0.9: 
+            if random.random() > 0.9:
                 print(f"Applying patch KB{random.randint(400000, 999999)}...")
             sys.stdout.write(f"\r{i}% complete")
             sys.stdout.flush()
@@ -136,7 +133,6 @@ def print_matrix_header(extra_art=None):
     print("╚══════╝  ╚═╝       ╚═╝  ╚═╝       ╚═╝          ╚═╝   ")
     print(HColor.ENDC)
     
-    # --- ANIMATION GAP CONTENT ---
     if extra_art:
         for line in extra_art:
             print(HColor.CYAN + line.center(68) + HColor.ENDC)
@@ -171,7 +167,6 @@ def animate_intro():
     print(f"  {HColor.BRIGHT_GREEN}[✓] CHECKING DONE{HColor.ENDC}")
     time.sleep(1.0)
     
-    # Reset to clean header
     print_matrix_header()
 
 def print_status(prefix, message, status="info"):
@@ -190,7 +185,6 @@ def print_status(prefix, message, status="info"):
         color = HColor.GREEN
     print(f"  {timestamp} {symbol} {HColor.BOLD}{prefix}:{HColor.ENDC} {color}{message}{HColor.ENDC}")
 
-# --- NETWORK HELPERS ---
 def send_packet(sock, data):
     if isinstance(data, str): data = data.encode('utf-8')
     length = struct.pack('>I', len(data))
@@ -207,18 +201,16 @@ def recv_packet(sock):
         data += packet
     return data
 
-# --- SERVER ---
 class ChatServer:
     def __init__(self, host='localhost', port=5555):
         self.host = host
         self.port = port
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.clients = {} # {client_socket: {'name': name, 'crypto': crypto_obj}}
+        self.clients = {}
         self.connection_key = self.generate_connection_key()
-        self.lock = threading.Lock()  # For thread safety
+        self.lock = threading.Lock()
 
     def generate_connection_key(self):
-        # Generate a 256-bit (32-byte) cryptographically secure key
         return secrets.token_hex(32)
     
     def start(self):
@@ -229,9 +221,7 @@ class ChatServer:
             print_status("ERROR", f"Failed to bind: {e}", "error")
             return
 
-        # Wrap server with TLS
         context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-        # Fix: Use paths relative to this script file to work regardless of CWD
         base_dir = os.path.dirname(os.path.abspath(__file__))
         cert_path = os.path.join(base_dir, 'server.crt')
         key_path = os.path.join(base_dir, 'server.key')
@@ -266,7 +256,7 @@ class ChatServer:
     def handle_client(self, client, addr):
         try:
             crypto = SecureCrypto(self.connection_key)
-            challenge = secrets.token_hex(16)  # Secure random challenge
+            challenge = secrets.token_hex(16)
             send_packet(client, challenge.encode())
 
             raw_response = recv_packet(client)
@@ -279,7 +269,7 @@ class ChatServer:
                 return
 
             username = parts[2].strip()
-            if not username or len(username) > 50:  # Input validation
+            if not username or len(username) > 50:
                 client.close()
                 return
 
@@ -366,7 +356,6 @@ class ChatServer:
             print_status("ERROR", f"Close error: {e}", "error")
 
 
-# --- CLIENT (PURE TERMINAL) ---
 class ChatClient:
     def __init__(self, host, port, key, username):
         self.host = host
@@ -383,10 +372,9 @@ class ChatClient:
             print()
             progress_bar("ESTABLISHING SECURE UPLINK", 0.5)
 
-            # Wrap socket with TLS
             context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
             context.check_hostname = False
-            context.verify_mode = ssl.CERT_NONE  # For demo; in production, verify certs
+            context.verify_mode = ssl.CERT_NONE
             self.client = context.wrap_socket(self.client, server_hostname=self.host)
             self.client.connect((self.host, self.port))
 
