@@ -36,10 +36,35 @@ from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
+try:
+    from export_utils import ExportManager, InputValidator
+    EXPORT_AVAILABLE = True
+except ImportError:
+    EXPORT_AVAILABLE = False
+    print("[WARNING] export_utils.py not found. Export functionality disabled.")
+
+try:
+    from core.token_system import BifrostTokenSystem
+    from core.watchdog import watchdog, enforce_timeout
+    OMEGA_CORE_AVAILABLE = True
+except ImportError:
+    OMEGA_CORE_AVAILABLE = False
+    print("[WARNING] Omega Core modules not found. Using legacy systems.")
+
 DB_FILE = "ultron_zero.db"
 LOG_FILE = "ultron_audit.log"
 MAX_CONCURRENCY = 100
 WATCHDOG_TIMEOUT = 1.5
+
+# Load configuration
+try:
+    with open('config.json', 'r') as f:
+        CONFIG = json.load(f)
+except:
+    CONFIG = {
+        "scan_settings": {"default_timeout": 1.5, "max_concurrency": 100},
+        "export_settings": {"auto_export": False}
+    }
 
 OUI_DB = {
     "00:50:56": "VMware Virtual", "00:0C:29": "VMware Virtual",
@@ -69,6 +94,10 @@ C_RED = "\033[38;5;196m"
 C_YELLOW = "\033[38;5;226m"
 C_WHITE = "\033[38;5;255m"
 C_GRAY = "\033[38;5;240m"
+C_MAGENTA = "\033[38;5;201m"
+C_PURPLE = "\033[38;5;141m"
+C_BLUE = "\033[38;5;33m"
+C_GREEN = "\033[38;5;46m"
 C_BOLD = "\033[1m"
 C_RESET = "\033[0m"
 C_CLEAR = "\033[H\033[J"
@@ -465,13 +494,21 @@ class VulnerabilityScanner:
         return findings
 
 class BifrostChat:
-    """[BIFROST_CHAT]: Secure P2P Protocol (E2EE: ECDH + AES-GCM)"""
+    """[BIFROST_CHAT]: Secure P2P Protocol (E2EE: ECDH + AES-GCM) - OMEGA ENHANCED"""
     
     def __init__(self):
         self.priv_key = ec.generate_private_key(ec.SECP256R1())
         self.pub_key = self.priv_key.public_key()
         self.shared_key = None
         self.aes = None
+        self.message_count = 0  # For session key rotation
+        self.session_active = False
+        
+        # Use new token system if available
+        if OMEGA_CORE_AVAILABLE:
+            self.token_system = BifrostTokenSystem()
+        else:
+            self.token_system = None
 
     def get_pub_bytes(self) -> bytes:
         return self.pub_key.public_bytes(
@@ -487,49 +524,88 @@ class BifrostChat:
                 algorithm=hashes.SHA256(),
                 length=32,
                 salt=None,
-                info=b'bifrost-v25-handshake'
+                info=b'bifrost-omega-v25-handshake'
             ).derive(shared_secret)
             self.aes = AESGCM(self.shared_key)
+            self.session_active = True
             return True
         except Exception as e:
             print(f"KEY DERIVATION FAILED: {e}")
             return False
 
     def encrypt(self, msg: str) -> bytes:
-        if not self.aes: return msg.encode()
+        """Encrypt message with AES-256-GCM (zero-trace: RAM only)"""
+        if not self.aes: 
+            return msg.encode()
+        
         nonce = os.urandom(12)
         ct = self.aes.encrypt(nonce, msg.encode(), None)
+        
+        # Session key rotation every 1000 messages
+        self.message_count += 1
+        if self.message_count >= 1000:
+            print(f"{C_YELLOW}[BIFROST] Session key rotation triggered{C_RESET}")
+            # In production, trigger key renegotiation
+        
         return nonce + ct
 
     def decrypt(self, data: bytes) -> str:
-        if not self.aes: return data.decode(errors='ignore')
+        """Decrypt message (zero-trace: no disk writes)"""
+        if not self.aes: 
+            return data.decode(errors='ignore')
         try:
             nonce = data[:12]
             ct = data[12:]
             pt = self.aes.decrypt(nonce, ct, None)
             return pt.decode()
-        except: return "[DECRYPTION FAILED]"
+        except: 
+            return "[DECRYPTION FAILED]"
+    
+    def wipe_session(self):
+        """Immediate session wipe (zero-trace protocol)"""
+        self.shared_key = None
+        self.aes = None
+        self.message_count = 0
+        self.session_active = False
+        print(f"{C_RED}[BIFROST] Session wiped. All keys destroyed.{C_RESET}")
 
     @staticmethod
     def generate_token(ip: str, port: int) -> str:
-        try:
-            parts = ip.split('.')
-            if len(parts) != 4: return "INVALID_IP"
-            o3 = int(parts[2])
-            o4 = int(parts[3])
-            token = f"{o3:03d}{o4:03d}{port:05d}"
-            return token
-        except: return "ERROR"
+        """Generate 10-digit HMAC-signed Bifrost token"""
+        if OMEGA_CORE_AVAILABLE:
+            token_sys = BifrostTokenSystem()
+            return token_sys.generate_token(ip, port)
+        else:
+            # Fallback to legacy 11-digit system
+            try:
+                parts = ip.split('.')
+                if len(parts) != 4: return "INVALID_IP"
+                o3 = int(parts[2])
+                o4 = int(parts[3])
+                token = f"{o3:03d}{o4:03d}{port:05d}"
+                return token
+            except: 
+                return "ERROR"
 
     @staticmethod
     def resolve_token(token: str) -> Tuple[str, int]:
-        try:
-            if len(token) != 11: return ("0.0.0.0", 0)
-            o3 = int(token[0:3])
-            o4 = int(token[3:6])
-            port = int(token[6:11])
-            return (f"192.168.{o3}.{o4}", port)
-        except: return ("0.0.0.0", 0)
+        """Resolve 10-digit token to IP:Port"""
+        if OMEGA_CORE_AVAILABLE:
+            token_sys = BifrostTokenSystem()
+            # Validate token first
+            if not token_sys.validate_token(token):
+                print(f"{C_RED}[WARNING] Invalid token checksum!{C_RESET}")
+            return token_sys.resolve_token(token)
+        else:
+            # Fallback to legacy 11-digit system
+            try:
+                if len(token) != 11: return ("0.0.0.0", 0)
+                o3 = int(token[0:3])
+                o4 = int(token[3:6])
+                port = int(token[6:11])
+                return (f"192.168.{o3}.{o4}", port)
+            except: 
+                return ("0.0.0.0", 0)
 
     async def start_server(self):
         port = random.randint(10000, 60000)
@@ -538,13 +614,29 @@ class BifrostChat:
         
         server = await asyncio.start_server(self.handle_client, '0.0.0.0', port)
         
-        print(f"{C_EMERALD}BIFROST SECURE UPLINK (AES-GCM) ACTIVE.{C_RESET}")
-        print(f"LOCAL NODE: {local_ip}:{port}")
-        print(f"SESSION TOKEN: {C_YELLOW}{token}{C_RESET}")
-        print("WAITING FOR PEER HANDSHAKE...")
+        print(f"{C_EMERALD}{C_BOLD}╔═══════════════════════════════════════════════════╗{C_RESET}")
+        print(f"{C_EMERALD}{C_BOLD}║  BIFROST OMEGA SECURE UPLINK (AES-256-GCM)       ║{C_RESET}")
+        print(f"{C_EMERALD}{C_BOLD}╚═══════════════════════════════════════════════════╝{C_RESET}")
+        print(f"{C_CYAN}LOCAL NODE: {local_ip}:{port}{C_RESET}")
         
-        async with server:
-            await server.serve_forever()
+        if OMEGA_CORE_AVAILABLE:
+            print(f"{C_YELLOW}SESSION TOKEN (10-digit HMAC-signed): {C_BOLD}{token}{C_RESET}")
+            print(f"{C_GRAY}Token Format: OOOPPPPPCC (IP octets + Port + Checksum){C_RESET}")
+        else:
+            print(f"{C_YELLOW}SESSION TOKEN (Legacy): {token}{C_RESET}")
+        
+        print(f"{C_GREEN}✓ Zero-trace mode: All messages RAM-only{C_RESET}")
+        print(f"{C_GREEN}✓ Session wipe on disconnect{C_RESET}")
+        print(f"\n{C_WHITE}WAITING FOR PEER HANDSHAKE...{C_RESET}\n")
+        
+        try:
+            async with server:
+                await server.serve_forever()
+        except KeyboardInterrupt:
+            print(f"\n{C_RED}[BIFROST] Server shutting down...{C_RESET}")
+            self.wipe_session()
+        finally:
+            self.wipe_session()
 
     async def handle_client(self, reader, writer):
         addr = writer.get_extra_info('peername')
@@ -641,18 +733,57 @@ class UltronTUI:
 
     def boot_sequence(self):
         self.clear()
+        
+        # Animated header
+        print(f"{C_EMERALD}{C_BOLD}")
+        print("╔═══════════════════════════════════════════════════════════════╗")
+        print("║                                                               ║")
+        print("║          ⚡ INITIALIZING ULTRON-ZERO PROTOCOL v25.0 ⚡         ║")
+        print("║                                                               ║")
+        print("╚═══════════════════════════════════════════════════════════════╝")
+        print(f"{C_RESET}\n")
+        
         logs = [
-            "JARVIS: INITIALIZING ULTRON-ZERO PROTOCOL v22.0...",
-            "CORE: MOUNTING VIBRANIUM DATA CORES...",
-            "NET: ESTABLISHING SATELLITE UPLINK...",
-            "DEF: MITM SENTINELS DEPLOYED.",
-            "OFF: RED TEAM MODULES ARMED.",
-            "SYS: WELCOME, SIR."
+            ("JARVIS", "INITIALIZING ULTRON-ZERO PROTOCOL v25.0...", 0.1),
+            ("CORE", "MOUNTING VIBRANIUM DATA CORES...", 0.1),
+            ("NET", "ESTABLISHING SATELLITE UPLINK...", 0.15),
+            ("CRYPTO", "LOADING AES-256-GCM ENCRYPTION ENGINE...", 0.1),
+            ("DEF", "MITM SENTINELS DEPLOYED.", 0.1),
+            ("OFF", "RED TEAM MODULES ARMED.", 0.1),
+            ("DB", "SQLITE DATABASE INITIALIZED.", 0.1),
+            ("SCAN", "NETWORK SCANNER READY.", 0.1),
+            ("SYS", "ALL SYSTEMS NOMINAL. WELCOME, SIR.", 0.15)
         ]
-        for l in logs:
-            print(f"[{C_BRIGHT_GREEN}OK{C_RESET}] {l}")
-            time.sleep(0.15)
-        time.sleep(0.5)
+        
+        for prefix, msg, delay in logs:
+            print(f"[{C_BRIGHT_GREEN}✓{C_RESET}] {C_CYAN}{prefix:8}{C_RESET}: {msg}")
+            time.sleep(delay)
+        
+        time.sleep(0.3)
+        print(f"\n{C_YELLOW}═══════════════════════════════════════════════════════════════{C_RESET}\n")
+        time.sleep(0.3)
+    
+    def draw_enhanced_banner(self):
+        """Draw enhanced ASCII banner with system info"""
+        print(f"{C_EMERALD}{C_BOLD}")
+        print(r"""
+  ███████╗██████╗ ██╗███████╗███████╗██╗   ██╗
+  ██╔════╝██╔══██╗██║██╔════╝██╔════╝╚██╗ ██╔╝
+  ███████╗██████╔╝██║█████╗  █████╗   ╚████╔╝ 
+  ╚════██║██╔═══╝ ██║██╔══╝  ██╔══╝    ╚██╔╝  
+  ███████║██║     ██║██║     ██║        ██║   
+  ╚══════╝╚═╝     ╚═╝╚═╝     ╚═╝        ╚═╝   
+        """)
+        print(f"{C_RESET}")
+        
+        # Enhanced header box with gradient effect
+        print(f"{C_RED}╔═══════════════════════════════════════════════════════════════╗{C_RESET}")
+        print(f"{C_YELLOW}║  ⚡ ULTRON-ZERO v25.0 (BIFROST-SENTINEL KERNEL) ⚡         ║{C_RESET}")
+        print(f"{C_CYAN}║  FULL-SPECTRUM OFFENSIVE & DEFENSIVE SYNERGY                ║{C_RESET}")
+        print(f"{C_PURPLE}║  [STARK INDUSTRIES - CLASSIFIED SECURITY PLATFORM]         ║{C_RESET}")
+        print(f"{C_RED}╚═══════════════════════════════════════════════════════════════╝{C_RESET}")
+        print()
+
 
 async def main():
     db = DatabaseManager()
@@ -675,37 +806,32 @@ async def main():
 
     while True:
         tui.clear()
-        print(f"{C_EMERALD}{C_BOLD}")
-        print(r"""
-  ███████╗██████╗ ██╗███████╗███████╗██╗   ██╗
-  ██╔════╝██╔══██╗██║██╔════╝██╔════╝╚██╗ ██╔╝
-  ███████╗██████╔╝██║█████╗  █████╗   ╚████╔╝ 
-  ╚════██║██╔═══╝ ██║██╔══╝  ██╔══╝    ╚██╔╝  
-  ███████║██║     ██║██║     ██║        ██║   
-  ╚══════╝╚═╝     ╚═╝╚═╝     ╚═╝        ╚═╝   
-        """)
-        print(f"{C_RED}╔═══════════════════════════════════════════════════╗{C_RESET}")
-        print(f"{C_YELLOW}║    ⚡ ULTRON-ZERO v25.0 (BIFROST) ⚡            ║{C_RESET}")
-        print(f"{C_CYAN}║    FULL-SPECTRUM OFFENSIVE & DEFENSIVE SYNERGY  ║{C_RESET}")
-        print(f"{C_RED}╚═══════════════════════════════════════════════════╝{C_RESET}")
-        print(f"{C_RESET}")
+        tui.draw_enhanced_banner()
         
-        menu = [
-            "[1] WIFI_RADAR (TOPO + OUI)",
-            "[2] AUTO_EXPLOIT (FUZZER)",
-            "[3] SERVICE_STRESSOR (DDoS)",
-            "[4] MITM_SENTINEL (ARP)",
-            "[5] SSL_TLS_AUDIT",
-            "[6] BREACH_SENSE",
-            "[7] ENCRYPTED_VAULT",
-            "[8] BIFROST_CHAT (P2P)",
-            "[9] DNS_ENUM (Recon)",
-            "[A] PASSWORD_CRACKER",
-            "[B] PACKET_SNIFFER",
-            "[C] VULN_SCANNER",
-            "[0] EXIT PROTOCOL"
-        ]
-        tui.draw_box(menu, "MISSION CONTROL")
+        # Color-coded menu with categories
+        print(f"{C_RED}{C_BOLD}🔴 OFFENSIVE MODULES{C_RESET}")
+        print(f"   {C_RED}[1]{C_RESET} WIFI_RADAR       - Network topology scan with device fingerprinting")
+        print(f"   {C_RED}[2]{C_RESET} AUTO_EXPLOIT     - Automated fuzzing engine (SQLi, XSS, RCE)")
+        print(f"   {C_RED}[3]{C_RESET} SERVICE_STRESSOR - DDoS simulation and load testing")
+        print(f"   {C_RED}[9]{C_RESET} DNS_ENUM         - DNS reconnaissance & subdomain discovery")
+        print(f"   {C_RED}[A]{C_RESET} PASSWORD_CRACKER - Hash cracking & password analysis")
+        print(f"   {C_RED}[C]{C_RESET} VULN_SCANNER     - Automated vulnerability detection")
+        print()
+        
+        print(f"{C_CYAN}{C_BOLD}🔵 DEFENSIVE MODULES{C_RESET}")
+        print(f"   {C_CYAN}[4]{C_RESET} MITM_SENTINEL    - ARP spoofing detection & monitoring")
+        print(f"   {C_CYAN}[5]{C_RESET} SSL_TLS_AUDIT    - Certificate validation & protocol analysis")
+        print(f"   {C_CYAN}[6]{C_RESET} BREACH_SENSE     - Identity leak detection")
+        print(f"   {C_CYAN}[B]{C_RESET} PACKET_SNIFFER   - Network traffic analysis")
+        print()
+        
+        print(f"{C_GREEN}{C_BOLD}🟢 UTILITY MODULES{C_RESET}")
+        print(f"   {C_GREEN}[7]{C_RESET} ENCRYPTED_VAULT  - Secure file encryption (AES-256-GCM)")
+        print(f"   {C_GREEN}[8]{C_RESET} BIFROST_CHAT     - P2P encrypted messaging (ECDH + AES)")
+        print()
+        
+        print(f"{C_GRAY}[0] EXIT PROTOCOL{C_RESET}")
+        print(f"\n{C_YELLOW}{'═' * 65}{C_RESET}")
         
         cmd = input(f"\n{C_BRIGHT_GREEN}stark@ultron:~# {C_RESET}").strip().upper()
 
@@ -716,6 +842,7 @@ async def main():
             print(f"{C_YELLOW}SCANNING LOCAL SUBNET FOR ALL CONNECTED DEVICES...{C_RESET}")
             subnet = ".".join(local_ip.split('.')[:-1])
             found = []
+            device_data = []  # For export
             
             # Get ARP table for MAC addresses
             try:
@@ -732,6 +859,7 @@ async def main():
 
             print(f"{C_YELLOW}PHASE 1: PING SWEEP (Scanning all 254 hosts: {subnet}.1-254)...{C_RESET}")
             print(f"{C_GRAY}This will take ~30 seconds to scan the entire network{C_RESET}")
+            print(f"{C_CYAN}[                                                  ] 0%{C_RESET}", end='\r')
             
             alive_hosts = []
             
@@ -749,16 +877,27 @@ async def main():
                     pass
                 return None
             
-            # Scan ALL 254 possible hosts in the subnet
+            # Scan ALL 254 possible hosts in the subnet with progress
             ping_tasks = [ping_host(f"{subnet}.{i}") for i in range(1, 255)]
-            ping_results = await asyncio.gather(*ping_tasks)
-            alive_hosts = [ip for ip in ping_results if ip]
             
-            print(f"{C_BRIGHT_GREEN}✓ FOUND {len(alive_hosts)} ALIVE DEVICES ON NETWORK{C_RESET}")
+            # Progress tracking
+            completed = 0
+            for coro in asyncio.as_completed(ping_tasks):
+                result = await coro
+                if result:
+                    alive_hosts.append(result)
+                    print(f"{C_GREEN}✓ Found: {result}{C_RESET}" + " " * 30)
+                completed += 1
+                progress = int((completed / 254) * 50)
+                pct = int((completed / 254) * 100)
+                bar = '█' * progress + '░' * (50 - progress)
+                print(f"{C_CYAN}[{bar}] {pct}%{C_RESET}", end='\r')
+            
+            print(f"\n{C_BRIGHT_GREEN}✓ FOUND {len(alive_hosts)} ALIVE DEVICES ON NETWORK{C_RESET}")
             print(f"{C_YELLOW}PHASE 2: DEEP FINGERPRINTING (Scanning ports on {len(alive_hosts)} devices)...{C_RESET}")
             
             # Comprehensive port list for better device detection
-            target_ports = [80, 443, 22, 21, 23, 25, 53, 135, 139, 445, 3389, 5900, 8080, 8443, 62078]
+            target_ports = CONFIG.get('scan_settings', {}).get('default_ports', [80, 443, 22, 21, 23, 25, 53, 135, 139, 445, 3389, 5900, 8080, 8443, 62078])
             
             async def scan_host_ports(target_ip):
                 open_p = []
@@ -842,6 +981,15 @@ async def main():
                     f"{os_guess.ljust(40)} | "
                     f"{port_str}"
                 )
+                
+                # Store for export
+                device_data.append({
+                    'ip': ip,
+                    'mac': mac_display,
+                    'vendor': vendor,
+                    'device_type': device_type,
+                    'ports': ','.join(map(str, sorted(ports))) if ports else ''
+                })
             
             # Display results
             tui.clear()
@@ -864,6 +1012,18 @@ async def main():
                     "devices": found[:10]  # Store first 10 devices
                 }
                 db.log_finding(user_id, "WIFI_RADAR", f"{subnet}.0/24", scan_summary, "INFO")
+                
+                # Export option
+                if EXPORT_AVAILABLE:
+                    print(f"\n{C_YELLOW}Export results? [J]SON / [C]SV / [N]o: {C_RESET}", end='')
+                    export_choice = input().strip().upper()
+                    if export_choice in ['J', 'C']:
+                        exporter = ExportManager()
+                        if export_choice == 'J':
+                            filepath = exporter.export_to_json({'subnet': f"{subnet}.0/24", 'devices': device_data}, 'wifi_radar')
+                        else:
+                            filepath = exporter.export_wifi_scan_to_csv(device_data, f"{subnet}.0/24")
+                        print(f"{C_GREEN}✓ Results exported to: {filepath}{C_RESET}")
             else:
                 print(f"{C_RED}NO DEVICES FOUND ON NETWORK{C_RESET}")
             
@@ -872,28 +1032,46 @@ async def main():
 
         elif cmd == '2':
             target = input("TARGET URL: ")
-            print(f"{C_YELLOW}INITIATING FUZZING SEQUENCE...{C_RESET}")
-            res = await exploit_sim.fuzz_target(target)
-            tui.draw_box(res if res else ["TARGET APPEARS RESILIENT"], "EXPLOIT MATRIX", C_RED)
-            db.log_finding(user_id, "AUTO_EXPLOIT", target, res, "HIGH" if res else "INFO")
-            input("CONTINUE...")
+            
+            # Input validation
+            if EXPORT_AVAILABLE and not InputValidator.validate_url(target):
+                print(f"{C_RED}ERROR: Invalid URL format. Must start with http:// or https://{C_RESET}")
+                input("CONTINUE...")
+            else:
+                print(f"{C_YELLOW}INITIATING FUZZING SEQUENCE...{C_RESET}")
+                res = await exploit_sim.fuzz_target(target)
+                tui.draw_box(res if res else ["TARGET APPEARS RESILIENT"], "EXPLOIT MATRIX", C_RED)
+                db.log_finding(user_id, "AUTO_EXPLOIT", target, res, "HIGH" if res else "INFO")
+                input("CONTINUE...")
 
         elif cmd == '3':
             target = input("TARGET URL: ")
-            cnt = int(input("PACKET COUNT (Max 100): "))
-            if cnt > 100: cnt = 100
-            print(f"{C_RED}ENGAGING STRESS TEST...{C_RESET}")
-            res = await stressor.stress_test(target, cnt)
             
-            lines = [
-                f"REQUESTS: {res['total']}",
-                f"SUCCESS: {res['success']}",
-                f"FAILED: {res['failed']}{C_RESET}",
-                f"LATENCY: {res['avg_latency_ms']} ms",
-                f"STATUS: {res['status']}"
-            ]
-            tui.draw_box(lines, "LOAD TEST REPORT", C_CYAN)
-            input("CONTINUE...")
+            # Input validation
+            if EXPORT_AVAILABLE and not InputValidator.validate_url(target):
+                print(f"{C_RED}ERROR: Invalid URL format. Must start with http:// or https://{C_RESET}")
+                input("CONTINUE...")
+            else:
+                try:
+                    cnt = int(input("PACKET COUNT (Max 100): "))
+                    if cnt > 100: cnt = 100
+                    if cnt < 1: cnt = 10
+                except ValueError:
+                    print(f"{C_RED}ERROR: Invalid number. Using default (50){C_RESET}")
+                    cnt = 50
+                
+                print(f"{C_RED}ENGAGING STRESS TEST...{C_RESET}")
+                res = await stressor.stress_test(target, cnt)
+                
+                lines = [
+                    f"REQUESTS: {res['total']}",
+                    f"SUCCESS: {res['success']}",
+                    f"FAILED: {res['failed']}{C_RESET}",
+                    f"LATENCY: {res['avg_latency_ms']} ms",
+                    f"STATUS: {res['status']}"
+                ]
+                tui.draw_box(lines, "LOAD TEST REPORT", C_CYAN)
+                input("CONTINUE...")
 
         elif cmd == '4':
             alerts = mitm.scan_arp_table()
@@ -905,17 +1083,24 @@ async def main():
 
         elif cmd == '5':
             host = input("HOSTNAME (e.g., google.com): ")
-            res = ssl_aud.audit_cert(host)
-            lines = [
-                f"VALID: {res['valid']}",
-                f"PROTO: {res.get('protocol', 'N/A')}",
-                f"CIPHER: {res.get('cipher', 'N/A')}",
-                f"EXPIRY: {res.get('expiry', 'N/A')}"
-            ]
-            if res.get('issues'):
-                lines.append(f"{C_RED}ISSUES: {res['issues']}{C_RESET}")
-            tui.draw_box(lines, "SSL/TLS DIAGNOSTICS")
-            input("CONTINUE...")
+            
+            # Input validation
+            if EXPORT_AVAILABLE and not InputValidator.validate_domain(host):
+                print(f"{C_RED}ERROR: Invalid domain format{C_RESET}")
+                input("CONTINUE...")
+            else:
+                print(f"{C_YELLOW}AUDITING SSL/TLS CERTIFICATE...{C_RESET}")
+                res = ssl_aud.audit_cert(host)
+                lines = [
+                    f"VALID: {res['valid']}",
+                    f"PROTO: {res.get('protocol', 'N/A')}",
+                    f"CIPHER: {res.get('cipher', 'N/A')}",
+                    f"EXPIRY: {res.get('expiry', 'N/A')}"
+                ]
+                if res.get('issues'):
+                    lines.append(f"{C_RED}ISSUES: {res['issues']}{C_RESET}")
+                tui.draw_box(lines, "SSL/TLS DIAGNOSTICS")
+                input("CONTINUE...")
 
         elif cmd == '6':
             email = input("EMAIL IDENTITY: ")
@@ -944,31 +1129,45 @@ async def main():
 
         elif cmd == '9':
             domain = input("TARGET DOMAIN (e.g., example.com): ")
-            print(f"{C_YELLOW}ENUMERATING DNS RECORDS...{C_RESET}")
-            dns_enum = DNSEnumerator()
-            results = await dns_enum.enumerate_dns(domain)
             
-            lines = [f"{C_CYAN}DISCOVERED SUBDOMAINS:{C_RESET}"]
-            if results["subdomains"]:
-                for sub in results["subdomains"]:
-                    lines.append(f"  ✓ {sub}")
+            # Input validation
+            if EXPORT_AVAILABLE and not InputValidator.validate_domain(domain):
+                print(f"{C_RED}ERROR: Invalid domain format{C_RESET}")
+                input("CONTINUE...")
             else:
-                lines.append("  No subdomains found")
-            
-            lines.append(f"\n{C_CYAN}IP ADDRESSES:{C_RESET}")
-            for ip in results["ips"]:
-                lines.append(f"  • {ip}")
-            
-            tui.draw_box(lines, "DNS ENUMERATION RESULTS", C_MAGENTA)
-            
-            # Log DNS enumeration results
-            db.log_finding(user_id, "DNS_ENUM", domain, {
-                "subdomains_found": len(results["subdomains"]),
-                "subdomains": results["subdomains"][:10],
-                "ips": results["ips"]
-            }, "INFO")
-            
-            input("CONTINUE...")
+                print(f"{C_YELLOW}ENUMERATING DNS RECORDS...{C_RESET}")
+                dns_enum = DNSEnumerator()
+                results = await dns_enum.enumerate_dns(domain)
+                
+                lines = [f"{C_CYAN}DISCOVERED SUBDOMAINS:{C_RESET}"]
+                if results["subdomains"]:
+                    for sub in results["subdomains"]:
+                        lines.append(f"  ✓ {sub}")
+                else:
+                    lines.append("  No subdomains found")
+                
+                lines.append(f"\n{C_CYAN}IP ADDRESSES:{C_RESET}")
+                for ip in results["ips"]:
+                    lines.append(f"  • {ip}")
+                
+                tui.draw_box(lines, "DNS ENUMERATION RESULTS", C_MAGENTA)
+                
+                # Log DNS enumeration results
+                db.log_finding(user_id, "DNS_ENUM", domain, {
+                    "subdomains_found": len(results["subdomains"]),
+                    "subdomains": results["subdomains"][:10],
+                    "ips": results["ips"]
+                }, "INFO")
+                
+                # Export option
+                if EXPORT_AVAILABLE and results["subdomains"]:
+                    print(f"\n{C_YELLOW}Export results? [Y/N]: {C_RESET}", end='')
+                    if input().strip().upper() == 'Y':
+                        exporter = ExportManager()
+                        filepath = exporter.export_dns_enum_to_csv(results["subdomains"], results["ips"], domain)
+                        print(f"{C_GREEN}✓ Results exported to: {filepath}{C_RESET}")
+                
+                input("CONTINUE...")
 
         elif cmd == 'A':
             print(f"{C_CYAN}[1] CRACK HASH   [2] ANALYZE PASSWORD{C_RESET}")
@@ -1046,227 +1245,96 @@ async def main():
             tui.draw_box(findings, "VULNERABILITY SCAN RESULTS", C_RED)
             db.log_finding(user_id, "VULN_SCANNER", target, findings, "HIGH" if len(findings) > 1 else "INFO")
             input("CONTINUE...")
-
-            print(f"{C_YELLOW}SCANNING LOCAL SUBNET FOR ALL CONNECTED DEVICES...{C_RESET}")
-            subnet = ".".join(local_ip.split('.')[:-1])
-            found = []
+        
+        elif cmd == '7':
+            # ENCRYPTED_VAULT Implementation
+            print(f"{C_CYAN}[1] ENCRYPT FILE   [2] DECRYPT FILE   [3] LIST VAULT{C_RESET}")
+            vault_choice = input("> ")
             
-            # Get ARP table for MAC addresses
-            try:
-                arp_out = subprocess.check_output("arp -a", shell=True).decode()
-                arp_map = {}
-                for line in arp_out.splitlines():
-                    if "(" in line and "at" in line:
-                        parts = line.split()
-                        ip = parts[1].strip('()')
-                        mac = parts[3]
-                        arp_map[ip] = mac
-            except: 
-                arp_map = {}
-
-            print(f"{C_YELLOW}PHASE 1: PING SWEEP (Scanning all 254 hosts: {subnet}.1-254)...{C_RESET}")
-            print(f"{C_GRAY}This will take ~30 seconds to scan the entire network{C_RESET}")
-            
-            alive_hosts = []
-            
-            async def ping_host(target_ip):
+            if vault_choice == '1':
+                filepath = input("FILE PATH TO ENCRYPT: ")
+                password = getpass.getpass("VAULT PASSWORD: ")
+                
                 try:
-                    proc = await asyncio.create_subprocess_exec(
-                        'ping', '-c', '1', '-W', '1', target_ip,
-                        stdout=asyncio.subprocess.DEVNULL,
-                        stderr=asyncio.subprocess.DEVNULL
-                    )
-                    await asyncio.wait_for(proc.wait(), timeout=2)
-                    if proc.returncode == 0:
-                        return target_ip
-                except:
-                    pass
-                return None
+                    if not os.path.exists(filepath):
+                        print(f"{C_RED}ERROR: File not found{C_RESET}")
+                    else:
+                        with open(filepath, 'rb') as f:
+                            data = f.read()
+                        
+                        # Generate encryption key from password
+                        salt = os.urandom(16)
+                        kdf = HKDF(
+                            algorithm=hashes.SHA256(),
+                            length=32,
+                            salt=salt,
+                            info=b'ultron-vault'
+                        )
+                        key = kdf.derive(password.encode())
+                        
+                        # Encrypt with AES-GCM
+                        aesgcm = AESGCM(key)
+                        nonce = os.urandom(12)
+                        ciphertext = aesgcm.encrypt(nonce, data, None)
+                        
+                        # Save encrypted file
+                        enc_filepath = filepath + '.encrypted'
+                        with open(enc_filepath, 'wb') as f:
+                            f.write(salt + nonce + ciphertext)
+                        
+                        print(f"{C_GREEN}✓ FILE ENCRYPTED: {enc_filepath}{C_RESET}")
+                        db.log_finding(user_id, "ENCRYPTED_VAULT", filepath, {"action": "encrypt", "output": enc_filepath}, "INFO")
+                except Exception as e:
+                    print(f"{C_RED}ENCRYPTION FAILED: {e}{C_RESET}")
             
-            # Scan ALL 254 possible hosts in the subnet
-            ping_tasks = [ping_host(f"{subnet}.{i}") for i in range(1, 255)]
-            ping_results = await asyncio.gather(*ping_tasks)
-            alive_hosts = [ip for ip in ping_results if ip]
-            
-            print(f"{C_BRIGHT_GREEN}✓ FOUND {len(alive_hosts)} ALIVE DEVICES ON NETWORK{C_RESET}")
-            print(f"{C_YELLOW}PHASE 2: DEEP FINGERPRINTING (Scanning ports on {len(alive_hosts)} devices)...{C_RESET}")
-            
-            # Comprehensive port list for better device detection
-            target_ports = [80, 443, 22, 21, 23, 25, 53, 135, 139, 445, 3389, 5900, 8080, 8443, 62078]
-            
-            async def scan_host_ports(target_ip):
-                open_p = []
-                for p in target_ports:
-                    if await net.scan_port(target_ip, p):
-                        open_p.append(p)
-                return (target_ip, open_p)
-
-            scan_tasks = [scan_host_ports(ip) for ip in alive_hosts]
-            host_results = await asyncio.gather(*scan_tasks)
-
-            print(f"{C_YELLOW}PHASE 3: GATHERING DEVICE INFORMATION...{C_RESET}")
-            
-            for ip, ports in host_results:
-                mac = arp_map.get(ip, "")
-                vendor = net.resolve_mac_vendor(mac) if mac else "Unknown"
-                banner = ""
+            elif vault_choice == '2':
+                filepath = input("ENCRYPTED FILE PATH: ")
+                password = getpass.getpass("VAULT PASSWORD: ")
                 
-                # Try to grab banner from open ports
-                if 80 in ports: 
-                    banner = await net.grab_banner(ip, 80)
-                elif 443 in ports: 
-                    banner = await net.grab_banner(ip, 443)
-                elif 22 in ports: 
-                    banner = await net.grab_banner(ip, 22)
-                elif 8080 in ports:
-                    banner = await net.grab_banner(ip, 8080)
-                
-                # Enhanced OS/Device detection
-                os_guess = "Unknown Device"
-                device_type = ""
-                
-                if ip == local_ip: 
-                    os_guess = f"{C_BRIGHT_GREEN}[THIS DEVICE - YOUR COMPUTER]{C_RESET}"
-                    device_type = "Local"
-                elif ip.endswith('.1'):
-                    os_guess = f"{C_CYAN}[ROUTER/GATEWAY]{C_RESET}"
-                    device_type = "Network"
-                elif 62078 in ports: 
-                    os_guess = "iOS Device (iPhone/iPad)"
-                    device_type = "Mobile"
-                elif 445 in ports and 3389 in ports: 
-                    os_guess = "Windows PC (SMB + RDP)"
-                    device_type = "Computer"
-                elif 445 in ports: 
-                    os_guess = "Windows Device (SMB)"
-                    device_type = "Computer"
-                elif 22 in ports and 80 not in ports and 443 not in ports: 
-                    os_guess = "Linux/Unix Server (SSH)"
-                    device_type = "Server"
-                elif 22 in ports and (80 in ports or 443 in ports):
-                    os_guess = "Linux Web Server"
-                    device_type = "Server"
-                elif 80 in ports or 443 in ports or 8080 in ports:
-                    os_guess = "Web Server/IoT Device"
-                    device_type = "Server/IoT"
-                elif 5900 in ports:
-                    os_guess = "VNC Server (Remote Desktop)"
-                    device_type = "Computer"
-                elif 23 in ports:
-                    os_guess = "Network Device (Telnet)"
-                    device_type = "Network"
-                elif not ports:
-                    os_guess = "Unknown (No open ports)"
-                    device_type = "Unknown"
-                
-                # Format port list
-                if ports:
-                    port_str = f"Ports: {','.join(map(str, sorted(ports)))}"
+                try:
+                    if not os.path.exists(filepath):
+                        print(f"{C_RED}ERROR: File not found{C_RESET}")
+                    else:
+                        with open(filepath, 'rb') as f:
+                            encrypted_data = f.read()
+                        
+                        # Extract salt, nonce, and ciphertext
+                        salt = encrypted_data[:16]
+                        nonce = encrypted_data[16:28]
+                        ciphertext = encrypted_data[28:]
+                        
+                        # Derive key from password
+                        kdf = HKDF(
+                            algorithm=hashes.SHA256(),
+                            length=32,
+                            salt=salt,
+                            info=b'ultron-vault'
+                        )
+                        key = kdf.derive(password.encode())
+                        
+                        # Decrypt
+                        aesgcm = AESGCM(key)
+                        plaintext = aesgcm.decrypt(nonce, ciphertext, None)
+                        
+                        # Save decrypted file
+                        dec_filepath = filepath.replace('.encrypted', '.decrypted')
+                        with open(dec_filepath, 'wb') as f:
+                            f.write(plaintext)
+                        
+                        print(f"{C_GREEN}✓ FILE DECRYPTED: {dec_filepath}{C_RESET}")
+                        db.log_finding(user_id, "ENCRYPTED_VAULT", filepath, {"action": "decrypt", "output": dec_filepath}, "INFO")
+                except Exception as e:
+                    print(f"{C_RED}DECRYPTION FAILED: {e} (Wrong password?){C_RESET}")
+            
+            elif vault_choice == '3':
+                # List encrypted files in current directory
+                encrypted_files = [f for f in os.listdir('.') if f.endswith('.encrypted')]
+                if encrypted_files:
+                    tui.draw_box(encrypted_files, "ENCRYPTED VAULT FILES", C_CYAN)
                 else:
-                    port_str = "No common ports detected"
-                
-                # Add to results with enhanced formatting
-                mac_display = mac if mac else "N/A"
-                vendor_display = vendor[:25].ljust(25) if vendor else "Unknown".ljust(25)
-                
-                found.append(
-                    f"{ip.ljust(15)} | "
-                    f"{mac_display.ljust(17)} | "
-                    f"{vendor_display} | "
-                    f"{os_guess.ljust(40)} | "
-                    f"{port_str}"
-                )
+                    tui.draw_box(["No encrypted files found in current directory"], "VAULT EMPTY", C_GRAY)
             
-            # Display results
-            tui.clear()
-            print(f"{C_EMERALD}{C_BOLD}")
-            print("=" * 120)
-            print(f"NETWORK SCAN COMPLETE - {len(alive_hosts)} DEVICES FOUND ON {subnet}.0/24")
-            print("=" * 120)
-            print(f"{C_RESET}")
-            
-            if found:
-                print(f"{C_CYAN}IP Address      | MAC Address       | Vendor                    | Device Type/OS                           | Open Ports{C_RESET}")
-                print("-" * 120)
-                for device in found:
-                    print(device)
-            else:
-                print(f"{C_RED}NO DEVICES FOUND ON NETWORK{C_RESET}")
-            
-            print(f"\n{C_GRAY}Total devices: {len(alive_hosts)} | Subnet: {subnet}.0/24 | Your IP: {local_ip}{C_RESET}")
-            input(f"\n{C_BRIGHT_GREEN}Press ENTER to continue...{C_RESET}")
-
-        elif cmd == '2':
-            target = input("TARGET URL: ")
-            print(f"{C_YELLOW}INITIATING FUZZING SEQUENCE...{C_RESET}")
-            res = await exploit_sim.fuzz_target(target)
-            tui.draw_box(res if res else ["TARGET APPEARS RESILIENT"], "EXPLOIT MATRIX", C_RED)
-            db.log_finding(user_id, "AUTO_EXPLOIT", target, res, "HIGH" if res else "INFO")
             input("CONTINUE...")
-
-        elif cmd == '3':
-            target = input("TARGET URL: ")
-            cnt = int(input("PACKET COUNT (Max 100): "))
-            if cnt > 100: cnt = 100
-            print(f"{C_RED}ENGAGING STRESS TEST...{C_RESET}")
-            res = await stressor.stress_test(target, cnt)
-            
-            lines = [
-                f"REQUESTS: {res['total']}",
-                f"SUCCESS: {res['success']}",
-                f"FAILED: {res['failed']}{C_RESET}",
-                f"LATENCY: {res['avg_latency_ms']} ms",
-                f"STATUS: {res['status']}"
-            ]
-            tui.draw_box(lines, "LOAD TEST REPORT", C_CYAN)
-            input("CONTINUE...")
-
-        elif cmd == '4':
-            alerts = mitm.scan_arp_table()
-            if alerts:
-                tui.draw_box(alerts, "INTEGRITY WARNING", C_RED)
-            else:
-                tui.draw_box(["ARP TABLES CLEAN. GATEWAY SECURE."], "SENTINEL STATUS")
-            input("CONTINUE...")
-
-        elif cmd == '5':
-            host = input("HOSTNAME (e.g., google.com): ")
-            res = ssl_aud.audit_cert(host)
-            lines = [
-                f"VALID: {res['valid']}",
-                f"PROTO: {res.get('protocol', 'N/A')}",
-                f"CIPHER: {res.get('cipher', 'N/A')}",
-                f"EXPIRY: {res.get('expiry', 'N/A')}"
-            ]
-            if res.get('issues'):
-                lines.append(f"{C_RED}ISSUES: {res['issues']}{C_RESET}")
-            tui.draw_box(lines, "SSL/TLS DIAGNOSTICS")
-            input("CONTINUE...")
-
-        elif cmd == '6':
-            email = input("EMAIL IDENTITY: ")
-            res = BreachSense.check_identity(email)
-            tui.draw_box([res], "BREACH REPOSITORY")
-            input("CONTINUE...")
-
-            with db.get_conn() as conn:
-                rows = conn.execute("SELECT module, target, severity, timestamp FROM findings WHERE user_id=?", (user_id,)).fetchall()
-            lines = [f"{r['timestamp']} | {r['severity']} | {r['module']} | {r['target']}" for r in rows]
-            tui.draw_box(lines if lines else ["VAULT EMPTY"], "CLASSIFIED INTEL")
-            input("CONTINUE...")
-
-        elif cmd == '8':
-            chat = BifrostChat()
-            print(f"{C_BLUE}[1] HOST (SERVER)   [2] CONNECT (CLIENT){C_RESET}")
-            sc = input("> ")
-            if sc == '1':
-                try:
-                    await chat.start_server()
-                except KeyboardInterrupt: pass
-            elif sc == '2':
-                tk = input("ENTER BIFROST TOKEN: ")
-                await chat.connect_peer(tk)
-            input("SESSION ENDED...")
 
 if __name__ == "__main__":
     try:

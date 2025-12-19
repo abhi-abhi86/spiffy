@@ -1,0 +1,39 @@
+{
+    "scan_settings": {
+        "default_timeout": 1.5,
+        "max_concurrency": 100,
+        "ping_timeout": 2,
+        "default_ports": [
+            80,
+            443,
+            22,
+            21,
+            23,
+            25,
+            53,
+            135,
+            139,
+            445,
+            3389,
+            5900,
+            8080,
+            8443,
+            62078
+        ]
+    },
+    "export_settings": {
+        "auto_export": false,
+        "export_format": "json",
+        "export_directory": "spiffy_exports"
+    },
+    "ui_settings": {
+        "color_theme": "default",
+        "show_animations": true,
+        "clear_screen": true
+    },
+    "security_settings": {
+        "require_confirmation_for_offensive": true,
+        "log_all_actions": true,
+        "max_stress_test_requests": 100
+    }
+}
