@@ -1,0 +1,15 @@
+# Cryptography libraries
+cryptography>=41.0.0
+
+# Async and networking
+asyncio-dgram>=2.1.2
+
+# TOTP/2FA support
+pyotp>=2.9.0
+qrcode>=7.4.2
+
+# Additional utilities
+Pillow>=10.0.0
+
+# Performance optimization
+cython>=3.0.0

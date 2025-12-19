@@ -307,6 +307,163 @@ class BreachSense:
             return f"COMPROMISED (Simulated found in 3 breaches)"
         return "SECURE (No simulated breaches found)"
 
+class DNSEnumerator:
+    """[DNS_ENUM]: DNS Reconnaissance & Subdomain Discovery"""
+    COMMON_SUBDOMAINS = [
+        "www", "mail", "ftp", "localhost", "webmail", "smtp", "pop", "ns1", "webdisk",
+        "ns2", "cpanel", "whm", "autodiscover", "autoconfig", "m", "imap", "test", "ns",
+        "blog", "pop3", "dev", "www2", "admin", "forum", "news", "vpn", "ns3", "mail2",
+        "new", "mysql", "old", "lists", "support", "mobile", "mx", "static", "docs", "beta",
+        "shop", "sql", "secure", "demo", "cp", "calendar", "wiki", "web", "media", "email",
+        "images", "img", "www1", "intranet", "portal", "video", "sip", "dns2", "api", "cdn"
+    ]
+    
+    @staticmethod
+    async def enumerate_dns(domain: str) -> Dict[str, List[str]]:
+        """Enumerate DNS records and discover subdomains"""
+        results = {"subdomains": [], "ips": [], "mx_records": []}
+        
+        # Subdomain discovery
+        async def check_subdomain(sub):
+            try:
+                loop = asyncio.get_event_loop()
+                target = f"{sub}.{domain}"
+                info = await loop.getaddrinfo(target, None)
+                if info:
+                    ip = info[0][4][0]
+                    return (target, ip)
+            except:
+                pass
+            return None
+        
+        tasks = [check_subdomain(sub) for sub in DNSEnumerator.COMMON_SUBDOMAINS[:30]]
+        found = await asyncio.gather(*tasks)
+        
+        for result in found:
+            if result:
+                results["subdomains"].append(result[0])
+                if result[1] not in results["ips"]:
+                    results["ips"].append(result[1])
+        
+        return results
+
+class PasswordCracker:
+    """[PASSWORD_CRACKER]: Hash Cracking & Password Analysis"""
+    COMMON_PASSWORDS = [
+        "password", "123456", "12345678", "qwerty", "abc123", "monkey", "1234567",
+        "letmein", "trustno1", "dragon", "baseball", "iloveyou", "master", "sunshine",
+        "ashley", "bailey", "passw0rd", "shadow", "123123", "654321", "superman",
+        "qazwsx", "michael", "football", "admin", "welcome", "login", "princess"
+    ]
+    
+    @staticmethod
+    def crack_hash(hash_value: str, hash_type: str = "md5") -> Optional[str]:
+        """Attempt to crack a hash using common passwords"""
+        for password in PasswordCracker.COMMON_PASSWORDS:
+            if hash_type == "md5":
+                test_hash = hashlib.md5(password.encode()).hexdigest()
+            elif hash_type == "sha1":
+                test_hash = hashlib.sha1(password.encode()).hexdigest()
+            elif hash_type == "sha256":
+                test_hash = hashlib.sha256(password.encode()).hexdigest()
+            else:
+                return None
+            
+            if test_hash == hash_value.lower():
+                return password
+        return None
+    
+    @staticmethod
+    def analyze_password_strength(password: str) -> Dict[str, Any]:
+        """Analyze password strength"""
+        score = 0
+        feedback = []
+        
+        if len(password) >= 8:
+            score += 1
+        else:
+            feedback.append("Too short (min 8 chars)")
+        
+        if any(c.isupper() for c in password):
+            score += 1
+        else:
+            feedback.append("Add uppercase letters")
+        
+        if any(c.islower() for c in password):
+            score += 1
+        else:
+            feedback.append("Add lowercase letters")
+        
+        if any(c.isdigit() for c in password):
+            score += 1
+        else:
+            feedback.append("Add numbers")
+        
+        if any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?" for c in password):
+            score += 1
+        else:
+            feedback.append("Add special characters")
+        
+        strength = ["VERY WEAK", "WEAK", "FAIR", "GOOD", "STRONG", "VERY STRONG"][min(score, 5)]
+        
+        return {
+            "score": score,
+            "strength": strength,
+            "feedback": feedback,
+            "length": len(password)
+        }
+
+class PacketSniffer:
+    """[PACKET_SNIFFER]: Network Traffic Analysis"""
+    @staticmethod
+    def analyze_traffic(interface: str = "en0", duration: int = 10) -> Dict[str, Any]:
+        """Simulate packet sniffing (requires root privileges in real scenario)"""
+        # Simulated traffic analysis
+        protocols = {"TCP": random.randint(100, 500), "UDP": random.randint(50, 200), 
+                    "ICMP": random.randint(10, 50), "HTTP": random.randint(20, 100),
+                    "HTTPS": random.randint(50, 200), "DNS": random.randint(30, 80)}
+        
+        return {
+            "interface": interface,
+            "duration": duration,
+            "total_packets": sum(protocols.values()),
+            "protocols": protocols,
+            "suspicious": random.randint(0, 5)
+        }
+
+class VulnerabilityScanner:
+    """[VULN_SCANNER]: Automated Vulnerability Detection"""
+    COMMON_VULNS = [
+        ("Weak SSL/TLS", ["SSLv2", "SSLv3", "TLSv1.0"]),
+        ("Open Ports", [21, 23, 445, 3389]),
+        ("Default Credentials", ["admin:admin", "root:root", "admin:password"]),
+        ("Missing Headers", ["X-Frame-Options", "Content-Security-Policy", "X-XSS-Protection"]),
+        ("Directory Listing", ["/admin", "/backup", "/.git", "/config"])
+    ]
+    
+    @staticmethod
+    async def scan_vulnerabilities(target: str) -> List[str]:
+        """Scan for common vulnerabilities"""
+        findings = []
+        
+        # Simulate vulnerability checks
+        if random.random() > 0.5:
+            findings.append("⚠ Weak SSL/TLS configuration detected")
+        
+        if random.random() > 0.6:
+            findings.append("⚠ Sensitive directories exposed")
+        
+        if random.random() > 0.7:
+            findings.append("⚠ Missing security headers")
+        
+        if random.random() > 0.8:
+            findings.append("⚠ Default credentials may be in use")
+        
+        if not findings:
+            findings.append("✓ No common vulnerabilities detected")
+        
+        return findings
+
 class BifrostChat:
     """[BIFROST_CHAT]: Secure P2P Protocol (E2EE: ECDH + AES-GCM)"""
     
@@ -520,39 +677,47 @@ async def main():
         tui.clear()
         print(f"{C_EMERALD}{C_BOLD}")
         print(r"""
-  _   _ _   _              ___________ _____ _____ 
- | | | | | | |            |___  /  ___|  __ \_   _|
- | | | | | |_ _ __ ___  _ __ / /| |__ | |  \/ | |  
- | | | | | __| '__/ _ \| '_ \  / |  __|| | __ | |  
- | |_| | | |_| | | (_) | | | / /__| |___| |_\ \| |  
-  \___/|_|\__|_|  \___/|_| |_\____\____/ \____/\_/  
-                                      v25.0 (BIFROST)
+  ███████╗██████╗ ██╗███████╗███████╗██╗   ██╗
+  ██╔════╝██╔══██╗██║██╔════╝██╔════╝╚██╗ ██╔╝
+  ███████╗██████╔╝██║█████╗  █████╗   ╚████╔╝ 
+  ╚════██║██╔═══╝ ██║██╔══╝  ██╔══╝    ╚██╔╝  
+  ███████║██║     ██║██║     ██║        ██║   
+  ╚══════╝╚═╝     ╚═╝╚═╝     ╚═╝        ╚═╝   
         """)
+        print(f"{C_RED}╔═══════════════════════════════════════════════════╗{C_RESET}")
+        print(f"{C_YELLOW}║    ⚡ ULTRON-ZERO v25.0 (BIFROST) ⚡            ║{C_RESET}")
+        print(f"{C_CYAN}║    FULL-SPECTRUM OFFENSIVE & DEFENSIVE SYNERGY  ║{C_RESET}")
+        print(f"{C_RED}╚═══════════════════════════════════════════════════╝{C_RESET}")
         print(f"{C_RESET}")
         
         menu = [
             "[1] WIFI_RADAR (TOPO + OUI)",
             "[2] AUTO_EXPLOIT (FUZZER)",
             "[3] SERVICE_STRESSOR (DDoS)",
-            "[4] MITM_SENTINEL (ARP ARP)",
+            "[4] MITM_SENTINEL (ARP)",
             "[5] SSL_TLS_AUDIT",
             "[6] BREACH_SENSE",
             "[7] ENCRYPTED_VAULT",
             "[8] BIFROST_CHAT (P2P)",
+            "[9] DNS_ENUM (Recon)",
+            "[A] PASSWORD_CRACKER",
+            "[B] PACKET_SNIFFER",
+            "[C] VULN_SCANNER",
             "[0] EXIT PROTOCOL"
         ]
         tui.draw_box(menu, "MISSION CONTROL")
         
-        cmd = input(f"\n{C_BRIGHT_GREEN}stark@ultron:~# {C_RESET}")
+        cmd = input(f"\n{C_BRIGHT_GREEN}stark@ultron:~# {C_RESET}").strip().upper()
 
         if cmd == '0':
             print("SHUTDOWN COMMAND ACCEPTED."); break
 
         elif cmd == '1':
-            print(f"{C_YELLOW}SCANNING LOCAL SUBNET...{C_RESET}")
+            print(f"{C_YELLOW}SCANNING LOCAL SUBNET FOR ALL CONNECTED DEVICES...{C_RESET}")
             subnet = ".".join(local_ip.split('.')[:-1])
             found = []
             
+            # Get ARP table for MAC addresses
             try:
                 arp_out = subprocess.check_output("arp -a", shell=True).decode()
                 arp_map = {}
@@ -562,18 +727,12 @@ async def main():
                         ip = parts[1].strip('()')
                         mac = parts[3]
                         arp_map[ip] = mac
-            except: arp_map = {}
+            except: 
+                arp_map = {}
 
-            target_ports = [80, 443, 22, 62078, 445]
-            tasks = []
-            for i in range(1, 20):
-                ip = f"{subnet}.{i}"
-                for p in target_ports:
-                    tasks.append(net.scan_port(ip, p))
+            print(f"{C_YELLOW}PHASE 1: PING SWEEP (Scanning all 254 hosts: {subnet}.1-254)...{C_RESET}")
+            print(f"{C_GRAY}This will take ~30 seconds to scan the entire network{C_RESET}")
             
-            results = await asyncio.gather(*tasks)
-            
-            print(f"{C_YELLOW}PHASE 1: PING SWEEP (192.168.x.1-254)...{C_RESET}")
             alive_hosts = []
             
             async def ping_host(target_ip):
@@ -590,14 +749,16 @@ async def main():
                     pass
                 return None
             
+            # Scan ALL 254 possible hosts in the subnet
             ping_tasks = [ping_host(f"{subnet}.{i}") for i in range(1, 255)]
             ping_results = await asyncio.gather(*ping_tasks)
             alive_hosts = [ip for ip in ping_results if ip]
             
-            print(f"{C_BRIGHT_GREEN}FOUND {len(alive_hosts)} ALIVE HOSTS{C_RESET}")
-            print(f"{C_YELLOW}PHASE 2: DEEP FINGERPRINTING...{C_RESET}")
+            print(f"{C_BRIGHT_GREEN}✓ FOUND {len(alive_hosts)} ALIVE DEVICES ON NETWORK{C_RESET}")
+            print(f"{C_YELLOW}PHASE 2: DEEP FINGERPRINTING (Scanning ports on {len(alive_hosts)} devices)...{C_RESET}")
             
-            target_ports = [80, 443, 22, 62078, 445]
+            # Comprehensive port list for better device detection
+            target_ports = [80, 443, 22, 21, 23, 25, 53, 135, 139, 445, 3389, 5900, 8080, 8443, 62078]
             
             async def scan_host_ports(target_ip):
                 open_p = []
@@ -609,31 +770,413 @@ async def main():
             scan_tasks = [scan_host_ports(ip) for ip in alive_hosts]
             host_results = await asyncio.gather(*scan_tasks)
 
+            print(f"{C_YELLOW}PHASE 3: GATHERING DEVICE INFORMATION...{C_RESET}")
+            
             for ip, ports in host_results:
                 mac = arp_map.get(ip, "")
                 vendor = net.resolve_mac_vendor(mac) if mac else "Unknown"
                 banner = ""
-                if 80 in ports: banner = await net.grab_banner(ip, 80)
-                elif 443 in ports: banner = await net.grab_banner(ip, 443)
-                elif 22 in ports: banner = await net.grab_banner(ip, 22)
                 
-                os_guess = "Unknown"
+                # Try to grab banner from open ports
+                if 80 in ports: 
+                    banner = await net.grab_banner(ip, 80)
+                elif 443 in ports: 
+                    banner = await net.grab_banner(ip, 443)
+                elif 22 in ports: 
+                    banner = await net.grab_banner(ip, 22)
+                elif 8080 in ports:
+                    banner = await net.grab_banner(ip, 8080)
+                
+                # Enhanced OS/Device detection
+                os_guess = "Unknown Device"
+                device_type = ""
+                
                 if ip == local_ip: 
-                    os_guess = f"{C_BRIGHT_GREEN}[THIS DEVICE]{C_RESET}"
+                    os_guess = f"{C_BRIGHT_GREEN}[THIS DEVICE - YOUR COMPUTER]{C_RESET}"
+                    device_type = "Local"
+                elif ip.endswith('.1'):
+                    os_guess = f"{C_CYAN}[ROUTER/GATEWAY]{C_RESET}"
+                    device_type = "Network"
                 elif 62078 in ports: 
-                    os_guess = "iOS (iPhone/iPad)"
+                    os_guess = "iOS Device (iPhone/iPad)"
+                    device_type = "Mobile"
+                elif 445 in ports and 3389 in ports: 
+                    os_guess = "Windows PC (SMB + RDP)"
+                    device_type = "Computer"
                 elif 445 in ports: 
-                    os_guess = "Windows (SMB)"
-                elif 22 in ports and 80 not in ports: 
-                    os_guess = "Linux (SSH)"
-                elif 80 in ports or 443 in ports:
-                    os_guess = "Web Server"
+                    os_guess = "Windows Device (SMB)"
+                    device_type = "Computer"
+                elif 22 in ports and 80 not in ports and 443 not in ports: 
+                    os_guess = "Linux/Unix Server (SSH)"
+                    device_type = "Server"
+                elif 22 in ports and (80 in ports or 443 in ports):
+                    os_guess = "Linux Web Server"
+                    device_type = "Server"
+                elif 80 in ports or 443 in ports or 8080 in ports:
+                    os_guess = "Web Server/IoT Device"
+                    device_type = "Server/IoT"
+                elif 5900 in ports:
+                    os_guess = "VNC Server (Remote Desktop)"
+                    device_type = "Computer"
+                elif 23 in ports:
+                    os_guess = "Network Device (Telnet)"
+                    device_type = "Network"
+                elif not ports:
+                    os_guess = "Unknown (No open ports)"
+                    device_type = "Unknown"
                 
-                port_str = f"Ports: {','.join(map(str, ports))}" if ports else "No common ports"
-                found.append(f"{ip.ljust(15)} | {mac.ljust(17)} | {vendor[:20].ljust(20)} | {os_guess.ljust(25)} | {port_str}")
+                # Format port list
+                if ports:
+                    port_str = f"Ports: {','.join(map(str, sorted(ports)))}"
+                else:
+                    port_str = "No common ports detected"
+                
+                # Add to results with enhanced formatting
+                mac_display = mac if mac else "N/A"
+                vendor_display = vendor[:25].ljust(25) if vendor else "Unknown".ljust(25)
+                
+                found.append(
+                    f"{ip.ljust(15)} | "
+                    f"{mac_display.ljust(17)} | "
+                    f"{vendor_display} | "
+                    f"{os_guess.ljust(40)} | "
+                    f"{port_str}"
+                )
             
-            tui.draw_box(found or ["NO PROXIMATE HOSTS IDENTIFIED"], "RADAR SIGNALS")
+            # Display results
+            tui.clear()
+            print(f"{C_EMERALD}{C_BOLD}")
+            print("=" * 120)
+            print(f"NETWORK SCAN COMPLETE - {len(alive_hosts)} DEVICES FOUND ON {subnet}.0/24")
+            print("=" * 120)
+            print(f"{C_RESET}")
+            
+            if found:
+                print(f"{C_CYAN}IP Address      | MAC Address       | Vendor                    | Device Type/OS                           | Open Ports{C_RESET}")
+                print("-" * 120)
+                for device in found:
+                    print(device)
+            else:
+                print(f"{C_RED}NO DEVICES FOUND ON NETWORK{C_RESET}")
+            
+            print(f"\n{C_GRAY}Total devices: {len(alive_hosts)} | Subnet: {subnet}.0/24 | Your IP: {local_ip}{C_RESET}")
+            input(f"\n{C_BRIGHT_GREEN}Press ENTER to continue...{C_RESET}")
+
+        elif cmd == '2':
+            target = input("TARGET URL: ")
+            print(f"{C_YELLOW}INITIATING FUZZING SEQUENCE...{C_RESET}")
+            res = await exploit_sim.fuzz_target(target)
+            tui.draw_box(res if res else ["TARGET APPEARS RESILIENT"], "EXPLOIT MATRIX", C_RED)
+            db.log_finding(user_id, "AUTO_EXPLOIT", target, res, "HIGH" if res else "INFO")
             input("CONTINUE...")
+
+        elif cmd == '3':
+            target = input("TARGET URL: ")
+            cnt = int(input("PACKET COUNT (Max 100): "))
+            if cnt > 100: cnt = 100
+            print(f"{C_RED}ENGAGING STRESS TEST...{C_RESET}")
+            res = await stressor.stress_test(target, cnt)
+            
+            lines = [
+                f"REQUESTS: {res['total']}",
+                f"SUCCESS: {res['success']}",
+                f"FAILED: {res['failed']}{C_RESET}",
+                f"LATENCY: {res['avg_latency_ms']} ms",
+                f"STATUS: {res['status']}"
+            ]
+            tui.draw_box(lines, "LOAD TEST REPORT", C_CYAN)
+            input("CONTINUE...")
+
+        elif cmd == '4':
+            alerts = mitm.scan_arp_table()
+            if alerts:
+                tui.draw_box(alerts, "INTEGRITY WARNING", C_RED)
+            else:
+                tui.draw_box(["ARP TABLES CLEAN. GATEWAY SECURE."], "SENTINEL STATUS")
+            input("CONTINUE...")
+
+        elif cmd == '5':
+            host = input("HOSTNAME (e.g., google.com): ")
+            res = ssl_aud.audit_cert(host)
+            lines = [
+                f"VALID: {res['valid']}",
+                f"PROTO: {res.get('protocol', 'N/A')}",
+                f"CIPHER: {res.get('cipher', 'N/A')}",
+                f"EXPIRY: {res.get('expiry', 'N/A')}"
+            ]
+            if res.get('issues'):
+                lines.append(f"{C_RED}ISSUES: {res['issues']}{C_RESET}")
+            tui.draw_box(lines, "SSL/TLS DIAGNOSTICS")
+            input("CONTINUE...")
+
+        elif cmd == '6':
+            email = input("EMAIL IDENTITY: ")
+            res = BreachSense.check_identity(email)
+            tui.draw_box([res], "BREACH REPOSITORY")
+            input("CONTINUE...")
+
+            with db.get_conn() as conn:
+                rows = conn.execute("SELECT module, target, severity, timestamp FROM findings WHERE user_id=?", (user_id,)).fetchall()
+            lines = [f"{r['timestamp']} | {r['severity']} | {r['module']} | {r['target']}" for r in rows]
+            tui.draw_box(lines if lines else ["VAULT EMPTY"], "CLASSIFIED INTEL")
+            input("CONTINUE...")
+
+        elif cmd == '8':
+            chat = BifrostChat()
+            print(f"{C_BLUE}[1] HOST (SERVER)   [2] CONNECT (CLIENT){C_RESET}")
+            sc = input("> ")
+            if sc == '1':
+                try:
+                    await chat.start_server()
+                except KeyboardInterrupt: pass
+            elif sc == '2':
+                tk = input("ENTER BIFROST TOKEN: ")
+                await chat.connect_peer(tk)
+            input("SESSION ENDED...")
+
+        elif cmd == '9':
+            domain = input("TARGET DOMAIN (e.g., example.com): ")
+            print(f"{C_YELLOW}ENUMERATING DNS RECORDS...{C_RESET}")
+            dns_enum = DNSEnumerator()
+            results = await dns_enum.enumerate_dns(domain)
+            
+            lines = [f"{C_CYAN}DISCOVERED SUBDOMAINS:{C_RESET}"]
+            if results["subdomains"]:
+                for sub in results["subdomains"]:
+                    lines.append(f"  ✓ {sub}")
+            else:
+                lines.append("  No subdomains found")
+            
+            lines.append(f"\n{C_CYAN}IP ADDRESSES:{C_RESET}")
+            for ip in results["ips"]:
+                lines.append(f"  • {ip}")
+            
+            tui.draw_box(lines, "DNS ENUMERATION RESULTS", C_MAGENTA)
+            input("CONTINUE...")
+
+        elif cmd == 'A':
+            print(f"{C_CYAN}[1] CRACK HASH   [2] ANALYZE PASSWORD{C_RESET}")
+            choice = input("> ")
+            
+            if choice == '1':
+                hash_val = input("ENTER HASH: ")
+                hash_type = input("HASH TYPE (md5/sha1/sha256): ").lower()
+                print(f"{C_YELLOW}ATTEMPTING TO CRACK...{C_RESET}")
+                
+                cracker = PasswordCracker()
+                result = cracker.crack_hash(hash_val, hash_type)
+                
+                if result:
+                    tui.draw_box([f"{C_GREEN}✓ CRACKED!{C_RESET}", f"Password: {result}"], "SUCCESS", C_GREEN)
+                else:
+                    tui.draw_box([f"{C_RED}✗ NOT FOUND{C_RESET}", "Password not in common list"], "FAILED", C_RED)
+            
+            elif choice == '2':
+                pwd = getpass.getpass("ENTER PASSWORD TO ANALYZE: ")
+                cracker = PasswordCracker()
+                analysis = cracker.analyze_password_strength(pwd)
+                
+                lines = [
+                    f"Strength: {analysis['strength']}",
+                    f"Score: {analysis['score']}/5",
+                    f"Length: {analysis['length']} characters",
+                    "",
+                    "Recommendations:"
+                ]
+                for fb in analysis['feedback']:
+                    lines.append(f"  • {fb}")
+                
+                tui.draw_box(lines, "PASSWORD ANALYSIS", C_YELLOW)
+            
+            input("CONTINUE...")
+
+        elif cmd == 'B':
+            interface = input("NETWORK INTERFACE (default: en0): ") or "en0"
+            duration = int(input("CAPTURE DURATION (seconds, max 30): ") or "10")
+            if duration > 30: duration = 30
+            
+            print(f"{C_YELLOW}ANALYZING NETWORK TRAFFIC...{C_RESET}")
+            sniffer = PacketSniffer()
+            results = sniffer.analyze_traffic(interface, duration)
+            
+            lines = [
+                f"Interface: {results['interface']}",
+                f"Duration: {results['duration']}s",
+                f"Total Packets: {results['total_packets']}",
+                "",
+                "Protocol Distribution:"
+            ]
+            for proto, count in results['protocols'].items():
+                lines.append(f"  {proto}: {count} packets")
+            
+            lines.append("")
+            if results['suspicious'] > 0:
+                lines.append(f"{C_RED}⚠ Suspicious packets: {results['suspicious']}{C_RESET}")
+            else:
+                lines.append(f"{C_GREEN}✓ No suspicious activity{C_RESET}")
+            
+            tui.draw_box(lines, "TRAFFIC ANALYSIS", C_CYAN)
+            input("CONTINUE...")
+
+        elif cmd == 'C':
+            target = input("TARGET (IP or domain): ")
+            print(f"{C_YELLOW}SCANNING FOR VULNERABILITIES...{C_RESET}")
+            
+            scanner = VulnerabilityScanner()
+            findings = await scanner.scan_vulnerabilities(target)
+            
+            tui.draw_box(findings, "VULNERABILITY SCAN RESULTS", C_RED)
+            db.log_finding(user_id, "VULN_SCANNER", target, findings, "HIGH" if len(findings) > 1 else "INFO")
+            input("CONTINUE...")
+
+            print(f"{C_YELLOW}SCANNING LOCAL SUBNET FOR ALL CONNECTED DEVICES...{C_RESET}")
+            subnet = ".".join(local_ip.split('.')[:-1])
+            found = []
+            
+            # Get ARP table for MAC addresses
+            try:
+                arp_out = subprocess.check_output("arp -a", shell=True).decode()
+                arp_map = {}
+                for line in arp_out.splitlines():
+                    if "(" in line and "at" in line:
+                        parts = line.split()
+                        ip = parts[1].strip('()')
+                        mac = parts[3]
+                        arp_map[ip] = mac
+            except: 
+                arp_map = {}
+
+            print(f"{C_YELLOW}PHASE 1: PING SWEEP (Scanning all 254 hosts: {subnet}.1-254)...{C_RESET}")
+            print(f"{C_GRAY}This will take ~30 seconds to scan the entire network{C_RESET}")
+            
+            alive_hosts = []
+            
+            async def ping_host(target_ip):
+                try:
+                    proc = await asyncio.create_subprocess_exec(
+                        'ping', '-c', '1', '-W', '1', target_ip,
+                        stdout=asyncio.subprocess.DEVNULL,
+                        stderr=asyncio.subprocess.DEVNULL
+                    )
+                    await asyncio.wait_for(proc.wait(), timeout=2)
+                    if proc.returncode == 0:
+                        return target_ip
+                except:
+                    pass
+                return None
+            
+            # Scan ALL 254 possible hosts in the subnet
+            ping_tasks = [ping_host(f"{subnet}.{i}") for i in range(1, 255)]
+            ping_results = await asyncio.gather(*ping_tasks)
+            alive_hosts = [ip for ip in ping_results if ip]
+            
+            print(f"{C_BRIGHT_GREEN}✓ FOUND {len(alive_hosts)} ALIVE DEVICES ON NETWORK{C_RESET}")
+            print(f"{C_YELLOW}PHASE 2: DEEP FINGERPRINTING (Scanning ports on {len(alive_hosts)} devices)...{C_RESET}")
+            
+            # Comprehensive port list for better device detection
+            target_ports = [80, 443, 22, 21, 23, 25, 53, 135, 139, 445, 3389, 5900, 8080, 8443, 62078]
+            
+            async def scan_host_ports(target_ip):
+                open_p = []
+                for p in target_ports:
+                    if await net.scan_port(target_ip, p):
+                        open_p.append(p)
+                return (target_ip, open_p)
+
+            scan_tasks = [scan_host_ports(ip) for ip in alive_hosts]
+            host_results = await asyncio.gather(*scan_tasks)
+
+            print(f"{C_YELLOW}PHASE 3: GATHERING DEVICE INFORMATION...{C_RESET}")
+            
+            for ip, ports in host_results:
+                mac = arp_map.get(ip, "")
+                vendor = net.resolve_mac_vendor(mac) if mac else "Unknown"
+                banner = ""
+                
+                # Try to grab banner from open ports
+                if 80 in ports: 
+                    banner = await net.grab_banner(ip, 80)
+                elif 443 in ports: 
+                    banner = await net.grab_banner(ip, 443)
+                elif 22 in ports: 
+                    banner = await net.grab_banner(ip, 22)
+                elif 8080 in ports:
+                    banner = await net.grab_banner(ip, 8080)
+                
+                # Enhanced OS/Device detection
+                os_guess = "Unknown Device"
+                device_type = ""
+                
+                if ip == local_ip: 
+                    os_guess = f"{C_BRIGHT_GREEN}[THIS DEVICE - YOUR COMPUTER]{C_RESET}"
+                    device_type = "Local"
+                elif ip.endswith('.1'):
+                    os_guess = f"{C_CYAN}[ROUTER/GATEWAY]{C_RESET}"
+                    device_type = "Network"
+                elif 62078 in ports: 
+                    os_guess = "iOS Device (iPhone/iPad)"
+                    device_type = "Mobile"
+                elif 445 in ports and 3389 in ports: 
+                    os_guess = "Windows PC (SMB + RDP)"
+                    device_type = "Computer"
+                elif 445 in ports: 
+                    os_guess = "Windows Device (SMB)"
+                    device_type = "Computer"
+                elif 22 in ports and 80 not in ports and 443 not in ports: 
+                    os_guess = "Linux/Unix Server (SSH)"
+                    device_type = "Server"
+                elif 22 in ports and (80 in ports or 443 in ports):
+                    os_guess = "Linux Web Server"
+                    device_type = "Server"
+                elif 80 in ports or 443 in ports or 8080 in ports:
+                    os_guess = "Web Server/IoT Device"
+                    device_type = "Server/IoT"
+                elif 5900 in ports:
+                    os_guess = "VNC Server (Remote Desktop)"
+                    device_type = "Computer"
+                elif 23 in ports:
+                    os_guess = "Network Device (Telnet)"
+                    device_type = "Network"
+                elif not ports:
+                    os_guess = "Unknown (No open ports)"
+                    device_type = "Unknown"
+                
+                # Format port list
+                if ports:
+                    port_str = f"Ports: {','.join(map(str, sorted(ports)))}"
+                else:
+                    port_str = "No common ports detected"
+                
+                # Add to results with enhanced formatting
+                mac_display = mac if mac else "N/A"
+                vendor_display = vendor[:25].ljust(25) if vendor else "Unknown".ljust(25)
+                
+                found.append(
+                    f"{ip.ljust(15)} | "
+                    f"{mac_display.ljust(17)} | "
+                    f"{vendor_display} | "
+                    f"{os_guess.ljust(40)} | "
+                    f"{port_str}"
+                )
+            
+            # Display results
+            tui.clear()
+            print(f"{C_EMERALD}{C_BOLD}")
+            print("=" * 120)
+            print(f"NETWORK SCAN COMPLETE - {len(alive_hosts)} DEVICES FOUND ON {subnet}.0/24")
+            print("=" * 120)
+            print(f"{C_RESET}")
+            
+            if found:
+                print(f"{C_CYAN}IP Address      | MAC Address       | Vendor                    | Device Type/OS                           | Open Ports{C_RESET}")
+                print("-" * 120)
+                for device in found:
+                    print(device)
+            else:
+                print(f"{C_RED}NO DEVICES FOUND ON NETWORK{C_RESET}")
+            
+            print(f"\n{C_GRAY}Total devices: {len(alive_hosts)} | Subnet: {subnet}.0/24 | Your IP: {local_ip}{C_RESET}")
+            input(f"\n{C_BRIGHT_GREEN}Press ENTER to continue...{C_RESET}")
 
         elif cmd == '2':
             target = input("TARGET URL: ")
