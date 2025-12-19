@@ -856,6 +856,14 @@ async def main():
                 print("-" * 120)
                 for device in found:
                     print(device)
+                
+                # Log scan results to database
+                scan_summary = {
+                    "subnet": f"{subnet}.0/24",
+                    "total_devices": len(alive_hosts),
+                    "devices": found[:10]  # Store first 10 devices
+                }
+                db.log_finding(user_id, "WIFI_RADAR", f"{subnet}.0/24", scan_summary, "INFO")
             else:
                 print(f"{C_RED}NO DEVICES FOUND ON NETWORK{C_RESET}")
             
@@ -952,6 +960,14 @@ async def main():
                 lines.append(f"  • {ip}")
             
             tui.draw_box(lines, "DNS ENUMERATION RESULTS", C_MAGENTA)
+            
+            # Log DNS enumeration results
+            db.log_finding(user_id, "DNS_ENUM", domain, {
+                "subdomains_found": len(results["subdomains"]),
+                "subdomains": results["subdomains"][:10],
+                "ips": results["ips"]
+            }, "INFO")
+            
             input("CONTINUE...")
 
         elif cmd == 'A':
@@ -968,8 +984,10 @@ async def main():
                 
                 if result:
                     tui.draw_box([f"{C_GREEN}✓ CRACKED!{C_RESET}", f"Password: {result}"], "SUCCESS", C_GREEN)
+                    db.log_finding(user_id, "PASSWORD_CRACKER", hash_val[:20], {"result": "CRACKED", "password": result, "hash_type": hash_type}, "HIGH")
                 else:
                     tui.draw_box([f"{C_RED}✗ NOT FOUND{C_RESET}", "Password not in common list"], "FAILED", C_RED)
+                    db.log_finding(user_id, "PASSWORD_CRACKER", hash_val[:20], {"result": "NOT_FOUND", "hash_type": hash_type}, "INFO")
             
             elif choice == '2':
                 pwd = getpass.getpass("ENTER PASSWORD TO ANALYZE: ")
