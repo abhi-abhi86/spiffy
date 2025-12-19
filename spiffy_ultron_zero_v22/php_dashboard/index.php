@@ -1,72 +1,11 @@
-<?php
-/**
- * Omega Kernel - Stark Industries Dashboard
- * PHP 8.3 Web Interface for Audit Log Viewing
- */
-
-// Database connection
-$db_path = __DIR__ . '/../../ultron_zero.db';
-$db = new SQLite3($db_path);
-
-// Get filter parameters
-$module_filter = $_GET['module'] ?? '';
-$severity_filter = $_GET['severity'] ?? '';
-$limit = (int)($_GET['limit'] ?? 100);
-
-// Build query
-$query = "SELECT * FROM findings WHERE 1=1";
-$params = [];
-
-if ($module_filter) {
-    $query .= " AND module = :module";
-    $params[':module'] = $module_filter;
-}
-
-if ($severity_filter) {
-    $query .= " AND severity = :severity";
-    $params[':severity'] = $severity_filter;
-}
-
-$query .= " ORDER BY timestamp DESC LIMIT :limit";
-
-$stmt = $db->prepare($query);
-foreach ($params as $key => $value) {
-    $stmt->bindValue($key, $value);
-}
-$stmt->bindValue(':limit', $limit, SQLITE3_INTEGER);
-
-$results = $stmt->execute();
-
-// Get statistics
-$stats_query = "SELECT 
-    COUNT(*) as total,
-    COUNT(DISTINCT module) as modules,
-    COUNT(CASE WHEN severity = 'CRITICAL' THEN 1 END) as critical,
-    COUNT(CASE WHEN severity = 'ERROR' THEN 1 END) as errors,
-    COUNT(CASE WHEN severity = 'WARNING' THEN 1 END) as warnings
-FROM findings";
-$stats = $db->querySingle($stats_query, true);
-
-// Get module list
-$modules_query = "SELECT DISTINCT module FROM findings ORDER BY module";
-$modules_result = $db->query($modules_query);
-$modules = [];
-while ($row = $modules_result->fetchArray(SQLITE3_ASSOC)) {
-    $modules[] = $row['module'];
-}
-?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>⚡ Omega Kernel - Stark Industries Dashboard</title>
+    <title>⚡ Omega Kernel Dashboard</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         
         body {
             font-family: 'Courier New', monospace;
@@ -76,10 +15,7 @@ while ($row = $modules_result->fetchArray(SQLITE3_ASSOC)) {
             padding: 20px;
         }
         
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-        }
+        .container { max-width: 1400px; margin: 0 auto; }
         
         .header {
             text-align: center;
@@ -95,11 +31,6 @@ while ($row = $modules_result->fetchArray(SQLITE3_ASSOC)) {
             font-size: 2.5em;
             text-shadow: 0 0 10px #00ff88;
             margin-bottom: 10px;
-        }
-        
-        .header p {
-            color: #00ccff;
-            font-size: 1.1em;
         }
         
         .stats {
@@ -142,26 +73,13 @@ while ($row = $modules_result->fetchArray(SQLITE3_ASSOC)) {
             border-radius: 8px;
             padding: 20px;
             margin-bottom: 30px;
-        }
-        
-        .filters h3 {
-            margin-bottom: 15px;
-            color: #00ccff;
-        }
-        
-        .filter-group {
             display: flex;
             gap: 15px;
             flex-wrap: wrap;
             align-items: center;
         }
         
-        .filter-group label {
-            color: #00ff88;
-        }
-        
-        .filter-group select,
-        .filter-group input {
+        .filters select, .filters input {
             background: #0a0e27;
             border: 1px solid #00ff88;
             color: #00ff88;
@@ -170,7 +88,7 @@ while ($row = $modules_result->fetchArray(SQLITE3_ASSOC)) {
             font-family: 'Courier New', monospace;
         }
         
-        .filter-group button {
+        .filters button {
             background: #00ff88;
             color: #0a0e27;
             border: none;
@@ -181,21 +99,18 @@ while ($row = $modules_result->fetchArray(SQLITE3_ASSOC)) {
             transition: all 0.3s;
         }
         
-        .filter-group button:hover {
+        .filters button:hover {
             background: #00ccff;
             transform: scale(1.05);
-        }
-        
-        .findings-table {
-            background: rgba(0, 255, 136, 0.05);
-            border: 1px solid #00ff88;
-            border-radius: 8px;
-            overflow: hidden;
         }
         
         table {
             width: 100%;
             border-collapse: collapse;
+            background: rgba(0, 255, 136, 0.05);
+            border: 1px solid #00ff88;
+            border-radius: 8px;
+            overflow: hidden;
         }
         
         th {
@@ -212,26 +127,12 @@ while ($row = $modules_result->fetchArray(SQLITE3_ASSOC)) {
             border-bottom: 1px solid rgba(0, 255, 136, 0.2);
         }
         
-        tr:hover {
-            background: rgba(0, 255, 136, 0.1);
-        }
+        tr:hover { background: rgba(0, 255, 136, 0.1); }
         
-        .severity-CRITICAL {
-            color: #ff4444;
-            font-weight: bold;
-        }
-        
-        .severity-ERROR {
-            color: #ff8844;
-        }
-        
-        .severity-WARNING {
-            color: #ffcc00;
-        }
-        
-        .severity-INFO {
-            color: #00ccff;
-        }
+        .severity-CRITICAL { color: #ff4444; font-weight: bold; }
+        .severity-ERROR { color: #ff8844; }
+        .severity-WARNING { color: #ffcc00; }
+        .severity-INFO { color: #00ccff; }
         
         .module-badge {
             background: rgba(0, 255, 136, 0.2);
@@ -239,11 +140,6 @@ while ($row = $modules_result->fetchArray(SQLITE3_ASSOC)) {
             border-radius: 4px;
             font-size: 0.85em;
             display: inline-block;
-        }
-        
-        .timestamp {
-            color: #888;
-            font-size: 0.9em;
         }
         
         .auto-refresh {
@@ -267,86 +163,43 @@ while ($row = $modules_result->fetchArray(SQLITE3_ASSOC)) {
             <p style="font-size: 0.9em; margin-top: 10px;">Real-Time Audit Log Monitoring</p>
         </div>
         
-        <div class="stats">
-            <div class="stat-card">
-                <div class="value"><?= number_format($stats['total']) ?></div>
-                <div class="label">Total Findings</div>
-            </div>
-            <div class="stat-card">
-                <div class="value"><?= $stats['modules'] ?></div>
-                <div class="label">Active Modules</div>
-            </div>
-            <div class="stat-card">
-                <div class="value" style="color: #ff4444;"><?= $stats['critical'] ?></div>
-                <div class="label">Critical</div>
-            </div>
-            <div class="stat-card">
-                <div class="value" style="color: #ff8844;"><?= $stats['errors'] ?></div>
-                <div class="label">Errors</div>
-            </div>
-            <div class="stat-card">
-                <div class="value" style="color: #ffcc00;"><?= $stats['warnings'] ?></div>
-                <div class="label">Warnings</div>
-            </div>
-        </div>
+        <div id="stats" class="stats"></div>
         
         <div class="filters">
-            <h3>🔍 FILTERS</h3>
-            <form method="GET" class="filter-group">
-                <label>Module:</label>
-                <select name="module">
-                    <option value="">All Modules</option>
-                    <?php foreach ($modules as $mod): ?>
-                        <option value="<?= htmlspecialchars($mod) ?>" 
-                                <?= $module_filter === $mod ? 'selected' : '' ?>>
-                            <?= htmlspecialchars($mod) ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-                
-                <label>Severity:</label>
-                <select name="severity">
-                    <option value="">All Severities</option>
-                    <option value="CRITICAL" <?= $severity_filter === 'CRITICAL' ? 'selected' : '' ?>>CRITICAL</option>
-                    <option value="ERROR" <?= $severity_filter === 'ERROR' ? 'selected' : '' ?>>ERROR</option>
-                    <option value="WARNING" <?= $severity_filter === 'WARNING' ? 'selected' : '' ?>>WARNING</option>
-                    <option value="INFO" <?= $severity_filter === 'INFO' ? 'selected' : '' ?>>INFO</option>
-                </select>
-                
-                <label>Limit:</label>
-                <input type="number" name="limit" value="<?= $limit ?>" min="10" max="1000" step="10">
-                
-                <button type="submit">Apply Filters</button>
-                <button type="button" onclick="location.href='index.php'">Reset</button>
-            </form>
+            <label>Module:</label>
+            <select id="moduleFilter">
+                <option value="">All Modules</option>
+            </select>
+            
+            <label>Severity:</label>
+            <select id="severityFilter">
+                <option value="">All Severities</option>
+                <option value="CRITICAL">CRITICAL</option>
+                <option value="ERROR">ERROR</option>
+                <option value="WARNING">WARNING</option>
+                <option value="INFO">INFO</option>
+            </select>
+            
+            <label>Limit:</label>
+            <input type="number" id="limitFilter" value="100" min="10" max="1000" step="10">
+            
+            <button onclick="applyFilters()">Apply Filters</button>
+            <button onclick="resetFilters()">Reset</button>
         </div>
         
-        <div class="findings-table">
-            <table>
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Module</th>
-                        <th>Target</th>
-                        <th>Details</th>
-                        <th>Severity</th>
-                        <th>Timestamp</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php while ($row = $results->fetchArray(SQLITE3_ASSOC)): ?>
-                    <tr>
-                        <td><?= $row['id'] ?></td>
-                        <td><span class="module-badge"><?= htmlspecialchars($row['module']) ?></span></td>
-                        <td><?= htmlspecialchars($row['target']) ?></td>
-                        <td><?= htmlspecialchars($row['details']) ?></td>
-                        <td class="severity-<?= $row['severity'] ?>"><?= $row['severity'] ?></td>
-                        <td class="timestamp"><?= $row['timestamp'] ?></td>
-                    </tr>
-                    <?php endwhile; ?>
-                </tbody>
-            </table>
-        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Module</th>
+                    <th>Target</th>
+                    <th>Details</th>
+                    <th>Severity</th>
+                    <th>Timestamp</th>
+                </tr>
+            </thead>
+            <tbody id="findingsTable"></tbody>
+        </table>
         
         <div class="auto-refresh">
             ⚡ Auto-refresh: <span id="countdown">30</span>s
@@ -354,15 +207,124 @@ while ($row = $modules_result->fetchArray(SQLITE3_ASSOC)) {
     </div>
     
     <script>
-        // Auto-refresh every 30 seconds
+        const API_BASE = 'api/findings.php';
         let countdown = 30;
+        
+        // Fetch and display statistics
+        async function loadStats() {
+            try {
+                const response = await fetch(`${API_BASE}?action=stats`);
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    const stats = data.stats;
+                    document.getElementById('stats').innerHTML = `
+                        <div class="stat-card">
+                            <div class="value">${stats.total.toLocaleString()}</div>
+                            <div class="label">Total Findings</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="value">${stats.modules}</div>
+                            <div class="label">Active Modules</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="value" style="color: #ff4444;">${stats.critical}</div>
+                            <div class="label">Critical</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="value" style="color: #ff8844;">${stats.errors}</div>
+                            <div class="label">Errors</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="value" style="color: #ffcc00;">${stats.warnings}</div>
+                            <div class="label">Warnings</div>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+        
+        // Fetch and display modules for filter
+        async function loadModules() {
+            try {
+                const response = await fetch(`${API_BASE}?action=modules`);
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    const select = document.getElementById('moduleFilter');
+                    data.modules.forEach(module => {
+                        const option = document.createElement('option');
+                        option.value = module;
+                        option.textContent = module;
+                        select.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading modules:', error);
+            }
+        }
+        
+        // Fetch and display findings
+        async function loadFindings() {
+            try {
+                const module = document.getElementById('moduleFilter').value;
+                const limit = document.getElementById('limitFilter').value;
+                
+                let url = `${API_BASE}?action=findings&limit=${limit}`;
+                if (module) url += `&module=${module}`;
+                
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    const tbody = document.getElementById('findingsTable');
+                    tbody.innerHTML = data.findings.map(finding => `
+                        <tr>
+                            <td>${finding.id}</td>
+                            <td><span class="module-badge">${finding.module}</span></td>
+                            <td>${finding.target}</td>
+                            <td>${finding.details}</td>
+                            <td class="severity-${finding.severity}">${finding.severity}</td>
+                            <td style="color: #888; font-size: 0.9em;">${finding.timestamp}</td>
+                        </tr>
+                    `).join('');
+                }
+            } catch (error) {
+                console.error('Error loading findings:', error);
+            }
+        }
+        
+        // Apply filters
+        function applyFilters() {
+            loadFindings();
+            loadStats();
+        }
+        
+        // Reset filters
+        function resetFilters() {
+            document.getElementById('moduleFilter').value = '';
+            document.getElementById('severityFilter').value = '';
+            document.getElementById('limitFilter').value = '100';
+            applyFilters();
+        }
+        
+        // Auto-refresh countdown
         setInterval(() => {
             countdown--;
             document.getElementById('countdown').textContent = countdown;
             if (countdown <= 0) {
-                location.reload();
+                countdown = 30;
+                loadStats();
+                loadFindings();
             }
         }, 1000);
+        
+        // Initial load
+        loadStats();
+        loadModules();
+        loadFindings();
     </script>
 </body>
 </html>
