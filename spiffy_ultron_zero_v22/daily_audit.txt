@@ -1,0 +1,15 @@
+OMEGA KERNEL SECURITY REPORT
+==================================================
+Generated: 2025-12-19 15:56:08 +0530
+Total Findings: 2
+
+[{"subnet": "10.229.30.0/24", "total_devices": 3, "devices": ["10.229.30.36    | 9a:5:45:9f:47:5a  | Unknown Hardware          | \u001b[38;5;82m[THIS DEVICE - YOUR COMPUTER]\u001b[0m | No common ports detected", "10.229.30.71    | c2:87:7c:6f:7a:d6 | Unknown Hardware          | Unknown Device                           | Ports: 53", "10.229.30.12    | ba:b1:39:34:5e:d6 | Unknown Hardware          | Unknown (No open ports)                  | No common ports detected"]}] 1
+  Target: WIFI_RADAR
+  Details: 10.229.30.0/24
+  Time: INFO
+
+[{"subnet": "10.229.30.0/24", "total_devices": 3, "devices": ["10.229.30.12    | N/A               | Unknown                   | Unknown (No open ports)                  | No common ports detected", "10.229.30.36    | N/A               | Unknown                   | \u001b[38;5;82m[THIS DEVICE - YOUR COMPUTER]\u001b[0m | No common ports detected", "10.229.30.71    | c2:87:7c:6f:7a:d6 | Unknown Hardware          | Unknown Device                           | Ports: 53"]}] 1
+  Target: WIFI_RADAR
+  Details: 10.229.30.0/24
+  Time: INFO
+

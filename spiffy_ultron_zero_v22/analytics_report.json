@@ -1,0 +1,24 @@
+{
+  "generated_at": "2025-12-19T15:56:16.000652",
+  "threat_summary": {
+    "total": 0,
+    "by_severity": {},
+    "by_module": {},
+    "critical_modules": []
+  },
+  "anomalies": [],
+  "network_map": {
+    "devices": [],
+    "total": 0,
+    "by_type": {}
+  },
+  "module_performance": {
+    "AUTO_EXPLOIT": {
+      "executions": 1,
+      "errors": 0,
+      "success_rate": 100.0,
+      "first_run": "2025-12-18 11:30:22",
+      "last_run": "2025-12-18 11:30:22"
+    }
+  }
+}
