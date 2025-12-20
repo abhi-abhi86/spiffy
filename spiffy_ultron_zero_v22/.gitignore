@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+venv/
+.venv/
+
+# Logs
+*.log
+server.log
+ngrok.log
+
+# Ngrok config (contains authtoken)
+ngrok.yml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Rust
+target/
+Cargo.lock
+*.rlib
+*.dylib
+
+# C++
+*.o
+*.a
+build/
+bt_build.log
+build.log
+
+# Temporary files
+*.tmp
+*.bak
+*~
+
+# Chat data
+chat_history.json

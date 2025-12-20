@@ -1,0 +1,17 @@
+[package]
+name = "rust-chat-crypto"
+version = "1.0.0"
+edition = "2021"
+
+[lib]
+name = "rust_chat_crypto"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.22", features = ["extension-module"] }
+x25519-dalek = "2.0"
+aes-gcm = "0.10"
+hmac = "0.12"
+sha2 = "0.10"
+hkdf = "0.12"
+rand = "0.8"
