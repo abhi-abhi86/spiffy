@@ -3,12 +3,11 @@
 // Callable from Python via PyO3
 
 use aes_gcm::{
-    aead::{Aead, KeyInit, OsRng},
+    aead::{Aead, AeadCore, KeyInit, OsRng},
     Aes256Gcm, Nonce,
 };
 use sha2::{Sha256, Digest};
-use std::ffi::{CStr, CString};
-use std::os::raw::c_char;
+use hmac::{Hmac, Mac};
 
 /// AES-256-GCM encryption (faster than Python cryptography)
 #[no_mangle]
@@ -154,7 +153,7 @@ pub extern "C" fn rust_hmac_sha256(
         let key_slice = std::slice::from_raw_parts(key, key_len);
         let data_slice = std::slice::from_raw_parts(data, data_len);
         
-        let mut mac = match HmacSha256::new_from_slice(key_slice) {
+        let mut mac: HmacSha256 = match Mac::new_from_slice(key_slice) {
             Ok(m) => m,
             Err(_) => return -2,
         };

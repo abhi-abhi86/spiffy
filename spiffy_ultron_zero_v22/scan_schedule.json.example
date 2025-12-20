@@ -1,0 +1,29 @@
+{
+  "jobs": [
+    {
+      "name": "Daily Network Scan",
+      "module": "WIFI_RADAR",
+      "schedule": "0 2 * * *",
+      "enabled": true,
+      "notify_channels": ["email", "telegram"],
+      "params": {},
+      "created": "2025-01-01T00:00:00",
+      "last_run": null,
+      "run_count": 0
+    },
+    {
+      "name": "Hourly Vulnerability Check",
+      "module": "VULN_SCANNER",
+      "schedule": "1h",
+      "enabled": false,
+      "notify_channels": ["discord"],
+      "params": {
+        "target": "192.168.1.1"
+      },
+      "created": "2025-01-01T00:00:00",
+      "last_run": null,
+      "run_count": 0
+    }
+  ],
+  "history": []
+}

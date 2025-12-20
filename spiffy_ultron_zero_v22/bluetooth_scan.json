@@ -1,0 +1,113 @@
+{
+  "scan_timestamp": 1766205005,
+  "scan_duration_seconds": 0,
+  "devices_found": 5,
+  "vulnerable_devices": 2,
+  "devices": [
+    {
+      "address": "AA:BB:CC:DD:EE:FF",
+      "name": "iPhone 12",
+      "rssi": -45,
+      "bluetooth_version": "5.0",
+      "vulnerabilities": {
+        "bluejacking": false,
+        "bluesnarfing": false,
+        "bluebugging": false,
+        "legacy_pairing": false
+      },
+      "security": {
+        "pairing_method": "SSP_NUMERIC_COMPARISON",
+        "encryption": "AES-CCM",
+        "key_size": 128,
+        "le_secure_connections": true,
+        "privacy_enabled": true
+      },
+      "risk_level": "LOW",
+      "security_score": 100
+    },
+    {
+      "address": "11:22:33:44:55:66",
+      "name": "Old Headset",
+      "rssi": -55,
+      "bluetooth_version": "2.0",
+      "vulnerabilities": {
+        "bluejacking": true,
+        "bluesnarfing": true,
+        "bluebugging": true,
+        "legacy_pairing": true
+      },
+      "security": {
+        "pairing_method": "LEGACY_PIN",
+        "encryption": "E0_WEAK",
+        "key_size": 56,
+        "le_secure_connections": false,
+        "privacy_enabled": false
+      },
+      "risk_level": "CRITICAL",
+      "security_score": 0
+    },
+    {
+      "address": "77:88:99:AA:BB:CC",
+      "name": "AirPods Pro",
+      "rssi": -65,
+      "bluetooth_version": "5.2",
+      "vulnerabilities": {
+        "bluejacking": false,
+        "bluesnarfing": false,
+        "bluebugging": false,
+        "legacy_pairing": false
+      },
+      "security": {
+        "pairing_method": "SSP_NUMERIC_COMPARISON",
+        "encryption": "AES-CCM",
+        "key_size": 128,
+        "le_secure_connections": true,
+        "privacy_enabled": true
+      },
+      "risk_level": "LOW",
+      "security_score": 100
+    },
+    {
+      "address": "12:34:56:78:90:AB",
+      "name": "Samsung Galaxy",
+      "rssi": -75,
+      "bluetooth_version": "5.1",
+      "vulnerabilities": {
+        "bluejacking": false,
+        "bluesnarfing": false,
+        "bluebugging": false,
+        "legacy_pairing": false
+      },
+      "security": {
+        "pairing_method": "SSP_NUMERIC_COMPARISON",
+        "encryption": "AES-CCM",
+        "key_size": 128,
+        "le_secure_connections": true,
+        "privacy_enabled": true
+      },
+      "risk_level": "LOW",
+      "security_score": 100
+    },
+    {
+      "address": "AB:CD:EF:12:34:56",
+      "name": "Legacy Device",
+      "rssi": -85,
+      "bluetooth_version": "1.2",
+      "vulnerabilities": {
+        "bluejacking": true,
+        "bluesnarfing": true,
+        "bluebugging": true,
+        "legacy_pairing": true
+      },
+      "security": {
+        "pairing_method": "LEGACY_PIN",
+        "encryption": "E0_WEAK",
+        "key_size": 56,
+        "le_secure_connections": false,
+        "privacy_enabled": false
+      },
+      "risk_level": "CRITICAL",
+      "security_score": 0
+    }
+  ]
+}

@@ -469,19 +469,38 @@ class PacketSniffer:
     """[PACKET_SNIFFER]: Network Traffic Analysis"""
     @staticmethod
     def analyze_traffic(interface: str = "en0", duration: int = 10) -> Dict[str, Any]:
-        """Simulate packet sniffing (requires root privileges in real scenario)"""
-        # Simulated traffic analysis
-        protocols = {"TCP": random.randint(100, 500), "UDP": random.randint(50, 200), 
-                    "ICMP": random.randint(10, 50), "HTTP": random.randint(20, 100),
-                    "HTTPS": random.randint(50, 200), "DNS": random.randint(30, 80)}
-        
-        return {
-            "interface": interface,
-            "duration": duration,
-            "total_packets": sum(protocols.values()),
-            "protocols": protocols,
-            "suspicious": random.randint(0, 5)
-        }
+        """Real packet sniffing using Scapy"""
+        try:
+            from packet_analyzer import RealPacketSniffer, SCAPY_AVAILABLE
+            
+            if not SCAPY_AVAILABLE:
+                # Fallback to simulation
+                print("⚠️  Scapy not available, using simulation mode")
+                protocols = {"TCP": random.randint(100, 500), "UDP": random.randint(50, 200), 
+                            "ICMP": random.randint(10, 50), "HTTP": random.randint(20, 100),
+                            "HTTPS": random.randint(50, 200), "DNS": random.randint(30, 80)}
+                
+                return {
+                    "interface": interface,
+                    "duration": duration,
+                    "total_packets": sum(protocols.values()),
+                    "protocols": protocols,
+                    "suspicious": random.randint(0, 5)
+                }
+            
+            # Use real packet capture
+            sniffer = RealPacketSniffer(interface=interface)
+            report = sniffer.start_capture(duration=duration, packet_count=1000)
+            
+            if 'error' in report:
+                print(f"❌ {report['error']}")
+                return {"error": report['error']}
+            
+            return report
+            
+        except Exception as e:
+            print(f"❌ Packet capture failed: {e}")
+            return {"error": str(e)}
 
 class VulnerabilityScanner:
     """[VULN_SCANNER]: Automated Vulnerability Detection"""
@@ -947,11 +966,17 @@ async def main():
         print(f"   {C_CYAN}[5]{C_RESET} SSL_TLS_AUDIT    - Certificate validation & protocol analysis")
         print(f"   {C_CYAN}[6]{C_RESET} BREACH_SENSE     - Identity leak detection")
         print(f"   {C_CYAN}[B]{C_RESET} PACKET_SNIFFER   - Network traffic analysis")
+        print(f"   {C_CYAN}[T]{C_RESET} BLUETOOTH_SCAN   - Bluetooth security audit (C++ backend)")
         print()
         
         print(f"{C_GREEN}{C_BOLD}🟢 UTILITY MODULES{C_RESET}")
         print(f"   {C_GREEN}[7]{C_RESET} ENCRYPTED_VAULT  - Secure file encryption (AES-256-GCM)")
         print(f"   {C_GREEN}[8]{C_RESET} BIFROST_CHAT     - P2P encrypted messaging (ECDH + AES)")
+        print()
+        
+        print(f"{C_MAGENTA}{C_BOLD}🔔 AUTOMATION & ALERTS{C_RESET}")
+        print(f"   {C_MAGENTA}[S]{C_RESET} SCHEDULER        - Manage scheduled scans")
+        print(f"   {C_MAGENTA}[N]{C_RESET} NOTIFICATIONS    - Configure alerts (Email/Telegram/Discord)")
         print()
         
         print(f"{C_GRAY}[0] EXIT PROTOCOL{C_RESET}")
@@ -1376,6 +1401,45 @@ async def main():
             
             tui.draw_box(lines, "TRAFFIC ANALYSIS", C_CYAN)
             input("CONTINUE...")
+        
+        elif cmd == 'T':
+            # Bluetooth Security Scanner
+            print(f"\n{C_CYAN}{'═' * 65}{C_RESET}")
+            print(f"{C_CYAN}{C_BOLD}🔵 BLUETOOTH SECURITY SCANNER{C_RESET}")
+            print(f"{C_CYAN}{'═' * 65}{C_RESET}")
+            print(f"{C_YELLOW}Backend: C++ (90% of work){C_RESET}")
+            print(f"{C_YELLOW}Frontend: Python (10% - UI only){C_RESET}")
+            print()
+            
+            try:
+                from bluetooth_security import BluetoothUI
+                
+                duration = input(f"{C_CYAN}Scan duration (seconds) [default: 8]: {C_RESET}").strip()
+                duration = int(duration) if duration else 8
+                
+                ui = BluetoothUI()
+                ui.scan(duration)
+                
+                # Export option
+                export = input(f"\n{C_CYAN}Export to JSON? (y/n): {C_RESET}").strip().lower()
+                if export == 'y':
+                    filename = input(f"{C_CYAN}Filename [bluetooth_scan.json]: {C_RESET}").strip()
+                    filename = filename if filename else "bluetooth_scan.json"
+                    ui.export_json(filename)
+                
+                ui.cleanup()
+                
+                # Log to database
+                db.log_finding(user_id, "BLUETOOTH_SCAN", "local", {"duration": duration}, "INFO")
+                
+            except ImportError as e:
+                print(f"{C_RED}✗ Bluetooth scanner not available{C_RESET}")
+                print(f"{C_YELLOW}  Build with: cd cpp_accelerators && make{C_RESET}")
+                print(f"{C_GRAY}  Error: {e}{C_RESET}")
+            except Exception as e:
+                print(f"{C_RED}✗ Error: {e}{C_RESET}")
+            
+            input("CONTINUE...")
 
         elif cmd == 'C':
             target = input("TARGET (IP or domain): ")
@@ -1477,6 +1541,83 @@ async def main():
                     tui.draw_box(["No encrypted files found in current directory"], "VAULT EMPTY", C_GRAY)
             
             input("CONTINUE...")
+        
+        elif cmd == 'S':
+            # SCHEDULER Management
+            try:
+                from scheduler import ScanScheduler, SCHEDULER_AVAILABLE
+                
+                if not SCHEDULER_AVAILABLE:
+                    print(f"{C_RED}❌ APScheduler not installed. Run: pip install APScheduler{C_RESET}")
+                    input("CONTINUE...")
+                    continue
+                
+                scheduler = ScanScheduler()
+                
+                print(f"{C_MAGENTA}{C_BOLD}SCHEDULER MANAGEMENT{C_RESET}")
+                print(f"[1] List Jobs   [2] Add Job   [3] Remove Job   [4] Pause/Resume")
+                sched_choice = input("> ")
+                
+                if sched_choice == '1':
+                    scheduler.print_jobs()
+                
+                elif sched_choice == '2':
+                    print(f"{C_CYAN}ADD SCHEDULED JOB{C_RESET}")
+                    job_name = input("Job Name: ")
+                    print("Available modules: WIFI_RADAR, AUTO_EXPLOIT, VULN_SCANNER, SSL_TLS_AUDIT")
+                    module = input("Module: ").upper()
+                    print("Schedule (cron or interval, e.g., '0 2 * * *' or '1h'): ")
+                    schedule = input("> ")
+                    
+                    scheduler.add_job(job_name, module, schedule)
+                    print(f"{C_GREEN}✓ Job added successfully{C_RESET}")
+                
+                elif sched_choice == '3':
+                    job_name = input("Job Name to Remove: ")
+                    scheduler.remove_job(job_name)
+                
+                elif sched_choice == '4':
+                    job_name = input("Job Name: ")
+                    action = input("[P]ause or [R]esume? ").upper()
+                    if action == 'P':
+                        scheduler.pause_job(job_name)
+                    elif action == 'R':
+                        scheduler.resume_job(job_name)
+                
+                input("CONTINUE...")
+                
+            except Exception as e:
+                print(f"{C_RED}❌ Scheduler error: {e}{C_RESET}")
+                input("CONTINUE...")
+        
+        elif cmd == 'N':
+            # NOTIFICATIONS Configuration
+            try:
+                from notifier import NotificationManager
+                
+                notifier = NotificationManager()
+                
+                print(f"{C_MAGENTA}{C_BOLD}NOTIFICATION MANAGEMENT{C_RESET}")
+                print(f"[1] Show Status   [2] Test Notifications   [3] Configure")
+                notif_choice = input("> ")
+                
+                if notif_choice == '1':
+                    notifier.print_status()
+                
+                elif notif_choice == '2':
+                    print(f"{C_CYAN}Testing all enabled notification channels...{C_RESET}")
+                    notifier.test_notifications()
+                
+                elif notif_choice == '3':
+                    print(f"{C_YELLOW}Edit notifications.conf file to configure channels{C_RESET}")
+                    print(f"File location: {os.path.abspath('notifications.conf')}")
+                    print(f"\nExample configuration available in: notifications.conf.example")
+                
+                input("CONTINUE...")
+                
+            except Exception as e:
+                print(f"{C_RED}❌ Notification error: {e}{C_RESET}")
+                input("CONTINUE...")
 
 if __name__ == "__main__":
     try:

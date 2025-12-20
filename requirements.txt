@@ -1,5 +1,8 @@
 # Cryptography libraries
 cryptography>=41.0.0
+scapy>=2.5.0
+APScheduler>=3.10.0
+requests>=2.31.0
 
 # Async and networking
 asyncio-dgram>=2.1.2
@@ -13,3 +16,5 @@ Pillow>=10.0.0
 
 # Performance optimization
 cython>=3.0.0
+redis>=5.0.0
+hiredis>=2.2.0  # C parser for Redis speed
