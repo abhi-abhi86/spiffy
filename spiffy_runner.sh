@@ -78,6 +78,8 @@ cat << "EOF"
 ║                                                                ║
 ║        ⚡ ULTRON ZERO V22 - MASTER INITIALIZATION ⚡          ║
 ║                                                                ║
+╠════════════════════════════════════════════════════════════════╣
+║  Developed by @abhi-abhi86 | https://github.com/abhi-abhi86   ║
 ╚════════════════════════════════════════════════════════════════╝
 EOF
 echo -e "${NC}"
