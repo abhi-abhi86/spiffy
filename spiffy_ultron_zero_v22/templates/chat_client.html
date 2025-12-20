@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔐 Spiffy Private Chat</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .chat-container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-radius: 25px;
+            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.3);
+            width: 100%;
+            max-width: 900px;
+            height: 90vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-title {
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .member-count {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .member-count:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .messages-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 25px;
+            background: linear-gradient(to bottom, #f8f9fa, #ffffff);
+        }
+
+        .message {
+            background: white;
+            padding: 15px 20px;
+            border-radius: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+            border-left: 4px solid #667eea;
+            position: relative;
+        }
+
+        .message-reply {
+            background: #f0f0f0;
+            padding: 8px 12px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            font-size: 13px;
+            color: #666;
+            border-left: 3px solid #999;
+        }
+
+        .message-username {
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .message-text {
+            color: #333;
+            line-height: 1.5;
+        }
+
+        .message-image {
+            max-width: 100%;
+            border-radius: 10px;
+            margin-top: 10px;
+            cursor: pointer;
+        }
+
+        .message-time {
+            font-size: 12px;
+            color: #999;
+            margin-top: 5px;
+        }
+
+        .message-actions {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .message:hover .message-actions {
+            opacity: 1;
+        }
+
+        .btn-reply {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 5px 12px;
+            border-radius: 5px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .system-message {
+            text-align: center;
+            color: #999;
+            font-size: 14px;
+            font-style: italic;
+            padding: 10px;
+        }
+
+        .reply-preview {
+            background: #f0f0f0;
+            padding: 10px 15px;
+            border-left: 3px solid #667eea;
+            margin: 10px 30px 0;
+            border-radius: 5px;
+            display: none;
+        }
+
+        .reply-preview.show {
+            display: block;
+        }
+
+        .input-area {
+            padding: 20px 30px;
+            background: white;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .input-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        #message-input {
+            flex: 1;
+            padding: 15px 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 15px;
+            font-size: 16px;
+        }
+
+        .btn-icon {
+            background: #f0f0f0;
+            border: none;
+            padding: 12px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 20px;
+        }
+
+        .btn-icon:hover {
+            background: #e0e0e0;
+        }
+
+        #send-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 35px;
+            border-radius: 15px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .username-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .username-box {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            text-align: center;
+        }
+
+        .username-box h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+
+        .username-box input {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 16px;
+            margin-bottom: 20px;
+        }
+
+        .username-box button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .member-list-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .member-list-modal.show {
+            display: flex;
+        }
+
+        .member-list-box {
+            background: white;
+            padding: 30px;
+            border-radius: 20px;
+            max-width: 400px;
+            width: 90%;
+        }
+
+        .member-list-box h3 {
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+
+        .member-item {
+            padding: 10px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Username modal -->
+    <div class="username-modal" id="username-modal">
+        <div class="username-box">
+            <h2>🔐 Welcome to Spiffy Private Chat</h2>
+            <p style="color: #666; margin-bottom: 20px;">Enter your name to join</p>
+            <input type="text" id="username-input" placeholder="Your name" autofocus>
+            <button onclick="joinChat()">Join Chat</button>
+        </div>
+    </div>
+
+    <!-- Member list modal -->
+    <div class="member-list-modal" id="member-modal">
+        <div class="member-list-box">
+            <h3>👥 Active Members</h3>
+            <div id="member-list"></div>
+            <button onclick="closeMemberList()" style="margin-top: 20px; width: 100%;">Close</button>
+        </div>
+    </div>
+
+    <!-- Chat container -->
+    <div class="chat-container" style="display: none;" id="chat-container">
+        <div class="chat-header">
+            <div class="header-title">🔐 Spiffy Private Chat</div>
+            <div class="member-count" id="member-count" onclick="showMembers()">
+                👥 0 members
+            </div>
+        </div>
+
+        <div class="messages-container" id="messages"></div>
+
+        <div class="reply-preview" id="reply-preview">
+            <div style="display: flex; justify-content: space-between;">
+                <span id="reply-text"></span>
+                <button onclick="cancelReply()" style="background: none; border: none; cursor: pointer;">✕</button>
+            </div>
+        </div>
+
+        <div class="input-area">
+            <div class="input-row">
+                <input type="file" id="image-input" accept="image/*" style="display: none;"
+                    onchange="handleImageSelect()">
+                <button class="btn-icon" onclick="document.getElementById('image-input').click()"
+                    title="Upload image">📷</button>
+                <input type="text" id="message-input" placeholder="Type your message..."
+                    onkeypress="handleKeyPress(event)">
+                <button id="send-btn" onclick="sendMessage()">Send 🚀</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script>
+        const token = '{{ token }}';
+        let socket;
+        let username = '';
+        let replyTo = null;
+        let memberCount = 0;
+
+        function joinChat() {
+            username = document.getElementById('username-input').value.trim();
+            if (!username) {
+                alert('Please enter your name');
+                return;
+            }
+
+            document.getElementById('username-modal').style.display = 'none';
+            document.getElementById('chat-container').style.display = 'flex';
+
+            socket = io();
+
+            socket.on('connect', () => {
+                socket.emit('join', { username, token });
+                loadMembers();
+            });
+
+            socket.on('message', (data) => {
+                addMessage(data);
+            });
+
+            socket.on('user_joined', (data) => {
+                memberCount = data.member_count || memberCount + 1;
+                updateMemberCount();
+                if (data.username !== username) {
+                    addSystemMessage(`${data.username} joined the chat`);
+                }
+            });
+
+            socket.on('user_left', (data) => {
+                memberCount = data.member_count || Math.max(0, memberCount - 1);
+                updateMemberCount();
+                addSystemMessage(`${data.username} left the chat`);
+            });
+        }
+
+        function updateMemberCount() {
+            document.getElementById('member-count').textContent = `👥 ${memberCount} member${memberCount !== 1 ? 's' : ''}`;
+        }
+
+        async function loadMembers() {
+            try {
+                const response = await fetch(`/api/members/${token}`);
+                const data = await response.json();
+                memberCount = data.count;
+                updateMemberCount();
+            } catch (error) {
+                console.error('Error loading members:', error);
+            }
+        }
+
+        async function showMembers() {
+            try {
+                const response = await fetch(`/api/members/${token}`);
+                const data = await response.json();
+
+                const list = document.getElementById('member-list');
+                list.innerHTML = '';
+
+                data.members.forEach(member => {
+                    const div = document.createElement('div');
+                    div.className = 'member-item';
+                    div.textContent = member.username;
+                    list.appendChild(div);
+                });
+
+                document.getElementById('member-modal').classList.add('show');
+            } catch (error) {
+                console.error('Error loading members:', error);
+            }
+        }
+
+        function closeMemberList() {
+            document.getElementById('member-modal').classList.remove('show');
+        }
+
+        async function handleImageSelect() {
+            const input = document.getElementById('image-input');
+            const file = input.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('image', file);
+
+            try {
+                const response = await fetch(`/api/upload_image/${token}`, {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    socket.emit('message', {
+                        message: '',
+                        image_url: data.url,
+                        reply_to: replyTo
+                    });
+                    replyTo = null;
+                    document.getElementById('reply-preview').classList.remove('show');
+                }
+            } catch (error) {
+                alert('Error uploading image: ' + error);
+            }
+
+            input.value = '';
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('message-input');
+            const message = input.value.trim();
+
+            if (!message) return;
+
+            socket.emit('message', {
+                message,
+                reply_to: replyTo
+            });
+
+            input.value = '';
+            replyTo = null;
+            document.getElementById('reply-preview').classList.remove('show');
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        function replyToMessage(messageId, username, text) {
+            replyTo = { id: messageId, username, text };
+            document.getElementById('reply-text').textContent = `Replying to ${username}: ${text.substring(0, 50)}...`;
+            document.getElementById('reply-preview').classList.add('show');
+            document.getElementById('message-input').focus();
+        }
+
+        function cancelReply() {
+            replyTo = null;
+            document.getElementById('reply-preview').classList.remove('show');
+        }
+
+        function addMessage(data) {
+            const container = document.getElementById('messages');
+            const time = new Date(data.timestamp).toLocaleTimeString();
+
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'message';
+
+            let html = '';
+
+            if (data.reply_to) {
+                html += `<div class="message-reply">↩️ ${data.reply_to.username}: ${escapeHtml(data.reply_to.text.substring(0, 50))}...</div>`;
+            }
+
+            html += `<div class="message-username">${escapeHtml(data.username)}</div>`;
+
+            if (data.message) {
+                html += `<div class="message-text">${escapeHtml(data.message)}</div>`;
+            }
+
+            if (data.image_url) {
+                html += `<img src="${data.image_url}" class="message-image" onclick="window.open('${data.image_url}', '_blank')">`;
+            }
+
+            html += `<div class="message-time">${time}</div>`;
+            html += `<div class="message-actions">
+                <button class="btn-reply" onclick="replyToMessage('${data.message_id}', '${escapeHtml(data.username)}', '${escapeHtml(data.message || 'image')}')">Reply</button>
+            </div>`;
+
+            msgDiv.innerHTML = html;
+            container.appendChild(msgDiv);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function addSystemMessage(text) {
+            const container = document.getElementById('messages');
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'system-message';
+            msgDiv.textContent = text;
+            container.appendChild(msgDiv);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        document.getElementById('username-input').focus();
+    </script>
+</body>
+
+</html>

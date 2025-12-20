@@ -1,50 +1,64 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-*.egg-info/
-dist/
-build/
-venv/
-.venv/
 
-# Logs
-*.log
-server.log
-ngrok.log
-
-# Ngrok config (contains authtoken)
-ngrok.yml
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Rust
-target/
-Cargo.lock
-*.rlib
-*.dylib
-
+!static/uploads/.gitkeep
+# Add files that contain personal data
 # C++
-*.o
+# Chat data
+# Configuration with credentials
+# Database files
+# IDE
+# Log files
+# Logs
+# Ngrok config (contains authtoken)
+# OS
+# Personal data
+# Python
+# Rust
+# Security - Sensitive Files
+# Temporary files
+# Uploads
+*$py.class
 *.a
-build/
+*.bak
+*.db
+*.dylib
+*.egg-info/
+*.key
+*.log
+*.o
+*.pem
+*.py[cod]
+*.rlib
+*.so
+*.sqlite
+*.sqlite3
+*.swo
+*.swp
+*.tmp
+*~
+.DS_Store
+.Python
+.env
+.idea/
+.venv/
+.vscode/
+Cargo.lock
+Thumbs.db
+__pycache__/
+active_sessions.json
 bt_build.log
 build.log
-
-# Temporary files
-*.tmp
-*.bak
-*~
-
-# Chat data
+build/
 chat_history.json
+chat_links.json
+chat_server.log
+daily_audit.txt
+dist/
+ngrok.log
+ngrok.yml
+notifications.conf
+scan_results.txt
+server.log
+spiffy_omega.db
+static/uploads/*
+target/
+venv/

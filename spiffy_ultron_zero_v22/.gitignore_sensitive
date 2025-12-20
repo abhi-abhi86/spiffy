@@ -1,0 +1,32 @@
+# Security - Sensitive Files
+# Add files that contain personal data
+
+# Log files
+*.log
+ngrok.log
+server.log
+chat_server.log
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+spiffy_omega.db
+
+# Chat data
+chat_links.json
+active_sessions.json
+
+# Configuration with credentials
+notifications.conf
+.env
+*.key
+*.pem
+
+# Uploads
+static/uploads/*
+!static/uploads/.gitkeep
+
+# Personal data
+daily_audit.txt
+scan_results.txt

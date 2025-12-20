@@ -368,6 +368,7 @@ echo ""
 echo -e "${YELLOW}🟢 UTILITY MODULES${NC}"
 echo "   [7] ENCRYPTED_VAULT  - Secure file encryption"
 echo "   [8] BIFROST_CHAT     - P2P encrypted messaging"
+echo "   [P] PRIVATE_CHAT     - Encrypted chat with GUI (NEW!)"
 echo ""
 
 echo -e "${BLUE}🔔 AUTOMATION & ALERTS${NC}"
@@ -434,6 +435,27 @@ case $LAUNCH_OPTION in
         ;;
     5)
         ./omega_ops.sh help
+        ;;
+    P|p)
+        echo -e "${GREEN}Launching Private Chat GUI...${NC}"
+        echo ""
+        # Check dependencies
+        if ! python3 -c "import PyQt6" 2>/dev/null; then
+            echo -e "${YELLOW}Installing PyQt6...${NC}"
+            pip3 install PyQt6 --break-system-packages 2>/dev/null || pip3 install PyQt6
+        fi
+        if ! python3 -c "import flask_socketio" 2>/dev/null; then
+            echo -e "${YELLOW}Installing Flask-SocketIO...${NC}"
+            pip3 install flask flask-socketio python-socketio --break-system-packages 2>/dev/null || \
+            pip3 install flask flask-socketio python-socketio
+        fi
+        # Build if needed
+        if [ ! -f "rust_private_chat/target/release/librust_private_chat.dylib" ] && [ ! -f "rust_private_chat/target/release/librust_private_chat.so" ]; then
+            echo -e "${CYAN}Building Rust crypto module...${NC}"
+            ./build_private_chat.sh
+        fi
+        # Launch GUI
+        python3 private_chat_gui.py
         ;;
     0)
         echo -e "${CYAN}Goodbye!${NC}"

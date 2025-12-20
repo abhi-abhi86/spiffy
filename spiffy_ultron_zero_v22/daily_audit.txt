@@ -1,5 +1,0 @@
-OMEGA KERNEL SECURITY REPORT
-==================================================
-Total Findings: 0
-
-(No findings recorded)

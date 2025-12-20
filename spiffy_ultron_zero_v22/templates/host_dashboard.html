@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔐 Spiffy Private Chat - Host Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 18px;
+            opacity: 0.9;
+        }
+
+        .controls {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 15px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-right: 15px;
+        }
+
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 25px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .panel h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+
+        .link-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            border-left: 4px solid #667eea;
+        }
+
+        .link-url {
+            font-family: monospace;
+            font-size: 14px;
+            color: #333;
+            word-break: break-all;
+        }
+
+        .link-meta {
+            font-size: 12px;
+            color: #666;
+            margin-top: 8px;
+        }
+
+        .message {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            border-left: 4px solid #764ba2;
+        }
+
+        .message-user {
+            font-weight: bold;
+            color: #764ba2;
+            margin-bottom: 5px;
+        }
+
+        .message-text {
+            color: #333;
+        }
+
+        .message-time {
+            font-size: 11px;
+            color: #999;
+            margin-top: 5px;
+        }
+
+        .activity-log {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .btn-small {
+            padding: 8px 20px;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+
+        .btn-copy {
+            background: #28a745;
+        }
+
+        .btn-revoke {
+            background: #dc3545;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .status-active {
+            background: #28a745;
+            color: white;
+        }
+
+        .status-revoked {
+            background: #dc3545;
+            color: white;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔐 Spiffy Private Chat</h1>
+            <p>Host Dashboard • Encrypted Chat with Beautiful Interfaces • MIT Licensed</p>
+        </div>
+
+        <div class="controls">
+            <button class="btn" onclick="generateLink()">🔗 Generate New Link</button>
+            <button class="btn" onclick="refreshLinks()">🔄 Refresh</button>
+        </div>
+
+        <div class="grid">
+            <div class="panel">
+                <h2>📋 Active Links</h2>
+                <div id="links-container"></div>
+            </div>
+
+            <div class="panel">
+                <h2>💬 Live Chat Activity</h2>
+                <div id="activity-container" class="activity-log"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script>
+        const socket = io();
+
+        // Join host monitoring room
+        socket.on('connect', () => {
+            socket.emit('join_host');
+            console.log('Connected to server');
+            refreshLinks();
+        });
+
+        // Listen for host updates
+        socket.on('host_update', (data) => {
+            const container = document.getElementById('activity-container');
+            const time = new Date(data.timestamp).toLocaleTimeString();
+
+            if (data.type === 'message') {
+                const msg = document.createElement('div');
+                msg.className = 'message';
+                msg.innerHTML = `
+                    <div class="message-user">${data.data.username}</div>
+                    <div class="message-text">${escapeHtml(data.data.message)}</div>
+                    <div class="message-time">${time}</div>
+                `;
+                container.appendChild(msg);
+            } else if (data.type === 'user_joined') {
+                const msg = document.createElement('div');
+                msg.className = 'message';
+                msg.innerHTML = `
+                    <div class="message-text" style="color: #28a745; font-weight: bold;">
+                        ✅ ${data.username} joined the chat
+                    </div>
+                    <div class="message-time">${time}</div>
+                `;
+                container.appendChild(msg);
+            } else if (data.type === 'user_left') {
+                const msg = document.createElement('div');
+                msg.className = 'message';
+                msg.innerHTML = `
+                    <div class="message-text" style="color: #dc3545; font-weight: bold;">
+                        ❌ ${data.username} left the chat
+                    </div>
+                    <div class="message-time">${time}</div>
+                `;
+                container.appendChild(msg);
+            }
+
+            container.scrollTop = container.scrollHeight;
+        });
+
+        async function generateLink() {
+            try {
+                const response = await fetch('/api/generate_link', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    // Copy to clipboard
+                    navigator.clipboard.writeText(data.url);
+
+                    alert(`✅ Link Generated!\n\n${data.url}\n\n📋 Copied to clipboard!`);
+                    refreshLinks();
+                }
+            } catch (error) {
+                alert('Error generating link: ' + error);
+            }
+        }
+
+        async function refreshLinks() {
+            try {
+                const response = await fetch('/api/links');
+                const data = await response.json();
+
+                const container = document.getElementById('links-container');
+                container.innerHTML = '';
+
+                if (data.links.length === 0) {
+                    container.innerHTML = '<p style="color: #999;">No links generated yet. Click "Generate New Link" to create one.</p>';
+                    return;
+                }
+
+                data.links.forEach(link => {
+                    const div = document.createElement('div');
+                    div.className = 'link-item';
+
+                    const created = new Date(link.created).toLocaleString();
+                    const expires = new Date(link.expires).toLocaleString();
+                    const status = link.active ?
+                        '<span class="status status-active">Active</span>' :
+                        '<span class="status status-revoked">Revoked</span>';
+
+                    div.innerHTML = `
+                        <div class="link-url">${link.url}</div>
+                        <div class="link-meta">
+                            Created: ${created} | Expires: ${expires} | ${status}
+                        </div>
+                        <button class="btn btn-small btn-copy" onclick="copyLink('${link.url}')">📋 Copy</button>
+                    `;
+
+                    container.appendChild(div);
+                });
+            } catch (error) {
+                console.error('Error refreshing links:', error);
+            }
+        }
+
+        function copyLink(url) {
+            navigator.clipboard.writeText(url);
+            alert('📋 Link copied to clipboard!');
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Auto-refresh links every 30 seconds
+        setInterval(refreshLinks, 30000);
+    </script>
+</body>
+
+</html>
